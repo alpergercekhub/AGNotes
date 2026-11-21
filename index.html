@@ -16,7 +16,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         window.__CLOUD_SYNC_API__ = {
             initializeApp,
@@ -26,7 +26,6 @@
             getFirestore,
             doc,
             setDoc,
-            getDoc,
             onSnapshot
         };
         window.dispatchEvent(new Event('cloud-sync-ready'));
@@ -450,35 +449,44 @@
         </div>
     </div>
 
-    <!-- Device Sync Modal (Workspace Room Code via KV/Local Sync) -->
+    <!-- Device Sync Modal (Workspace Code + Optional Firebase Config JSON) -->
     <div id="sync-modal" class="hidden fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-2xs flex items-center justify-center p-4">
         <div class="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-md w-full p-4 space-y-3">
             <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <h3 class="text-sm font-bold text-slate-900">Device Sync Code</h3>
+                <h3 class="text-sm font-bold text-slate-900">Device Sync Settings</h3>
                 <button id="close-sync-modal-btn" type="button" class="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
             <p class="text-xs text-slate-600 leading-relaxed">
-                Set a private workspace code to automatically sync across your laptop and phone in real time. Everything also remains safely saved locally in your browser.
+                Enter the same <strong>Workspace Code</strong> on both devices. For cross-device sync on GitHub Pages, paste your Firebase web config JSON below once per device; data also stays saved locally in this browser.
             </p>
             <div class="space-y-2">
                 <label class="block text-xs font-semibold text-slate-700">Workspace Code</label>
-                <div class="flex gap-2">
-                    <input
-                        id="sync-code-input"
-                        type="text"
-                        placeholder="e.g. my-focus-2026"
-                        class="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-xl outline-none"
-                    >
-                    <button
-                        id="save-sync-code-btn"
-                        type="button"
-                        class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer"
-                    >
-                        Save Code
-                    </button>
-                </div>
+                <input
+                    id="sync-code-input"
+                    type="text"
+                    placeholder="e.g. my-focus-2026"
+                    class="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-xl outline-none"
+                >
+            </div>
+            <div class="space-y-1.5">
+                <label class="block text-xs font-semibold text-slate-700">Firebase Config JSON (Required on GitHub Pages for Cloud Sync)</label>
+                <textarea
+                    id="firebase-config-input"
+                    rows="4"
+                    placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}'
+                    class="w-full p-2 text-[11px] font-mono bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-xl outline-none"
+                ></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-1">
+                <button
+                    id="save-sync-code-btn"
+                    type="button"
+                    class="px-3.5 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer"
+                >
+                    Save &amp; Connect
+                </button>
             </div>
             <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                 <span id="last-saved-timestamp" class="text-slate-400"></span>
@@ -496,19 +504,20 @@
     <script>
         /**
          * Personal Focus & Notes
-         * Single-file application managing:
+         * Single-file workspace application with:
          * - Soft pastel project blocks (Active, Completed grouped by project with accordion, Archived)
          * - Inline task title editing, editable due dates with overdue red styling, star importance,
          *   double-click bullet notes with outside-click auto-close
          * - Project-based vertical sidebar for Active Projects + Note Pages, long-form editor,
          *   expandable editor mode, Copy for Email formatting, and converting lines into tasks
          * - Following section supporting drag-and-drop from tasks, eye-icon follow, and project codes
-         * - Global search across all workspace items and JSON backup/restore
+         * - Global search across all workspace items, JSON backup/restore, and optional cloud sync
          */
         (function () {
             'use strict';
 
             const STORAGE_KEY = 'personal_focus_notes_v2';
+            const CUSTOM_FB_KEY = 'personal_focus_custom_firebase_v1';
             const LEGACY_KEYS = ['personal_focus_notes_v1', 'focus_notes_state', 'task_notes_app_data'];
             const appId = typeof __app_id !== 'undefined' && __app_id ? String(__app_id) : 'personal-focus-notes-app';
 
@@ -536,6 +545,7 @@
             };
 
             let state = createDefaultState();
+            let customFirebaseJson = '';
             let cloudDb = null;
             let cloudUser = null;
             let cloudUnsubscribe = null;
@@ -598,7 +608,6 @@
                 };
             }
 
-            // Safely refresh Lucide SVG icons
             function refreshIcons() {
                 try {
                     if (window.lucide && typeof window.lucide.createIcons === 'function') {
@@ -609,7 +618,6 @@
                 }
             }
 
-            // Show non-blocking toast message
             function showToast(message, type = 'info') {
                 const container = document.getElementById('toast-container');
                 if (!container) return;
@@ -629,7 +637,6 @@
                 }, 2600);
             }
 
-            // Normalize and migrate data from current or legacy keys
             function normalizeLoadedData(raw) {
                 const base = createDefaultState();
                 if (!raw || typeof raw !== 'object') return base;
@@ -651,7 +658,6 @@
 
                 const tasks = Array.isArray(raw.tasks)
                     ? raw.tasks.map((t) => {
-                        // Migrate legacy string notes into bullet items if needed
                         let bullets = [];
                         if (Array.isArray(t.bullets)) {
                             bullets = t.bullets.map((b) => ({
@@ -691,37 +697,6 @@
                         content: String(n.content || ''),
                         updatedAt: n.updatedAt || nowIso()
                     }));
-                } else if (Array.isArray(raw.weeks) && raw.weeks.length > 0) {
-                    // Migrate older weekly notes structure into project note pages
-                    raw.weeks.forEach((w) => {
-                        const weekLabel = w.label || 'Week Note';
-                        if (w.notesByProject && typeof w.notesByProject === 'object') {
-                            Object.entries(w.notesByProject).forEach(([pid, pagesOrText]) => {
-                                const targetPid = validProjectIds.has(pid) ? pid : fallbackProjectId;
-                                if (Array.isArray(pagesOrText)) {
-                                    pagesOrText.forEach((pg) => {
-                                        notePages.push({
-                                            id: uid('note'),
-                                            projectId: targetPid,
-                                            template: 'blank',
-                                            title: `${weekLabel} - ${pg.title || 'Note'}`,
-                                            content: String(pg.content || ''),
-                                            updatedAt: nowIso()
-                                        });
-                                    });
-                                } else if (typeof pagesOrText === 'string' && pagesOrText.trim()) {
-                                    notePages.push({
-                                        id: uid('note'),
-                                        projectId: targetPid,
-                                        template: 'blank',
-                                        title: weekLabel,
-                                        content: pagesOrText,
-                                        updatedAt: nowIso()
-                                    });
-                                }
-                            });
-                        }
-                    });
                 }
 
                 if (notePages.length === 0) {
@@ -777,6 +752,12 @@
 
             function loadState() {
                 try {
+                    customFirebaseJson = localStorage.getItem(CUSTOM_FB_KEY) || '';
+                } catch {
+                    customFirebaseJson = '';
+                }
+
+                try {
                     const currentRaw = localStorage.getItem(STORAGE_KEY);
                     if (currentRaw) {
                         state = normalizeLoadedData(JSON.parse(currentRaw));
@@ -822,23 +803,35 @@
                 }
             }
 
-            // Initialize Firebase Auth & Firestore when config is available
-            async function initCloudBackend() {
-                const api = window.__CLOUD_SYNC_API__;
-                if (!api || typeof __firebase_config === 'undefined' || !__firebase_config) {
-                    return;
+            function resolveFirebaseConfig() {
+                if (customFirebaseJson && customFirebaseJson.trim()) {
+                    const parsedCustom = JSON.parse(customFirebaseJson.trim());
+                    return parsedCustom?.firebaseConfig || parsedCustom;
                 }
-                try {
-                    const firebaseConfig = typeof __firebase_config === 'string'
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                    const envCfg = typeof __firebase_config === 'string'
                         ? JSON.parse(__firebase_config)
                         : __firebase_config;
-                    if (!firebaseConfig || !firebaseConfig.apiKey) return;
+                    return envCfg?.firebaseConfig || envCfg;
+                }
+                return null;
+            }
 
-                    const fbApp = api.initializeApp(firebaseConfig);
+            async function initCloudBackend() {
+                const api = window.__CLOUD_SYNC_API__;
+                if (!api) return;
+
+                try {
+                    const firebaseConfig = resolveFirebaseConfig();
+                    if (!firebaseConfig || !firebaseConfig.apiKey) {
+                        return;
+                    }
+
+                    const fbApp = api.initializeApp(firebaseConfig, `app_${firebaseConfig.projectId || 'default'}`);
                     const fbAuth = api.getAuth(fbApp);
                     cloudDb = api.getFirestore(fbApp);
 
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token && !customFirebaseJson) {
                         const cred = await api.signInWithCustomToken(fbAuth, __initial_auth_token);
                         cloudUser = cred.user;
                     } else {
@@ -852,7 +845,8 @@
                 } catch (err) {
                     console.warn('Cloud sync initialization skipped/failed:', err);
                     if (state.syncCode) {
-                        uiState.syncMode = 'local';
+                        uiState.syncMode = 'error';
+                        uiState.syncErrorMsg = 'Check Firebase setup';
                         updateSyncIndicator();
                     }
                 }
@@ -876,7 +870,6 @@
                 }
             }
 
-            // Listen to remote snapshot changes for automatic cross-device updates
             function attachSyncListener(code) {
                 detachSyncListener();
                 const cleanCode = String(code || '').trim();
@@ -902,7 +895,6 @@
                     docRef,
                     async (snap) => {
                         if (!snap.exists()) {
-                            // First device with this code seeds the cloud document
                             await pushStateNowToCloud(cleanCode);
                             uiState.syncMode = 'synced';
                             updateSyncIndicator();
@@ -938,7 +930,7 @@
                     (err) => {
                         console.warn('Cloud snapshot listener error:', err);
                         uiState.syncMode = 'error';
-                        uiState.syncErrorMsg = 'Offline or sync paused';
+                        uiState.syncErrorMsg = 'Sync paused';
                         updateSyncIndicator();
                     }
                 );
@@ -975,7 +967,7 @@
                 } catch (err) {
                     console.warn('Cloud push error:', err);
                     uiState.syncMode = 'error';
-                    uiState.syncErrorMsg = 'Sync queued locally';
+                    uiState.syncErrorMsg = 'Local only';
                     updateSyncIndicator();
                 }
             }
@@ -991,7 +983,7 @@
                     if (uiState.syncMode === 'synced') {
                         pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
                         dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
-                        label.textContent = `Auto-Sync: ${state.syncCode}`;
+                        label.textContent = `Live Sync: ${state.syncCode}`;
                     } else if (uiState.syncMode === 'connecting') {
                         pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200';
                         dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500';
@@ -1003,7 +995,7 @@
                     } else {
                         pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200';
                         dot.className = 'w-1.5 h-1.5 rounded-full bg-indigo-600';
-                        label.textContent = `Code: ${state.syncCode}`;
+                        label.textContent = `Code: ${state.syncCode} (Local)`;
                     }
                 } else {
                     pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200';
@@ -1045,7 +1037,6 @@
                 return safe.replace(regex, '<mark class="search-hit">$1</mark>');
             }
 
-            // Update header badges & counts
             function updateCountsAndHeader() {
                 const dateLabel = document.getElementById('header-date-label');
                 if (dateLabel) {
@@ -1072,7 +1063,6 @@
                 if (elArch) elArch.textContent = String(archivedProjectCount);
                 if (elFol) elFol.textContent = String(state.following.length);
 
-                // Populate project code suggestions for Following
                 const datalist = document.getElementById('project-code-suggestions');
                 if (datalist) {
                     datalist.innerHTML = state.projects
@@ -1084,13 +1074,11 @@
                 updateSyncIndicator();
             }
 
-            // Render Left Column: Active Projects, Completed (grouped by project with accordion), or Archived Projects
             function renderProjectsAndTasks() {
                 const container = document.getElementById('tasks-view-container');
                 const addProjForm = document.getElementById('add-project-form');
                 if (!container) return;
 
-                // Update tab active styles
                 document.querySelectorAll('.task-tab-btn').forEach((btn) => {
                     const isCurrent = btn.dataset.taskTab === uiState.taskTab;
                     btn.className = isCurrent
@@ -1141,7 +1129,6 @@
                                         ? `<p class="text-[11px] text-slate-400 px-2 py-1.5 italic">No open tasks in this project.</p>`
                                         : projTasks.map((task) => renderTaskRow(task)).join('')
                                 }
-                                <!-- Compact Inline Add Task Form -->
                                 <form data-add-task-project="${escapeHtml(proj.id)}" class="add-task-inline-form pt-1.5 mt-1 border-t border-slate-100 flex items-center gap-1.5">
                                     <button
                                         type="button"
@@ -1174,7 +1161,6 @@
 
                         return `
                             <div class="border border-slate-200 rounded-xl overflow-hidden shadow-2xs" data-project-card="${escapeHtml(proj.id)}">
-                                <!-- Soft Pastel Project Header -->
                                 <div
                                     style="background-color: ${palette.headerBg}; border-bottom: 1px solid ${palette.headerBorder};"
                                     class="px-3 py-1.5 flex items-center justify-between gap-2"
@@ -1267,13 +1253,11 @@
                             overdue ? 'bg-rose-50/40' : 'hover:bg-slate-50/80'
                         }"
                     >
-                        <!-- Compact Task Row (Double-click row to toggle bullet notes) -->
                         <div
                             data-task-row="${escapeHtml(task.id)}"
                             class="px-2 py-1 flex items-center justify-between gap-2 select-none"
                         >
                             <div class="flex items-center gap-2 min-w-0 flex-1">
-                                <!-- Drag Handle -->
                                 <span
                                     title="Drag to Following"
                                     class="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing shrink-0"
@@ -1281,7 +1265,6 @@
                                     <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
                                 </span>
 
-                                <!-- Completion Checkbox -->
                                 <input
                                     type="checkbox"
                                     data-task-complete="${escapeHtml(task.id)}"
@@ -1289,7 +1272,6 @@
                                     class="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer shrink-0"
                                 >
 
-                                <!-- Star Importance Toggle (~50% larger visual presence) -->
                                 <button
                                     type="button"
                                     data-task-star="${escapeHtml(task.id)}"
@@ -1312,7 +1294,6 @@
                                     </svg>
                                 </button>
 
-                                <!-- Task Title (Single-click edits inline, Double-click row opens bullet notes) -->
                                 ${
                                     isEditingTitle
                                         ? `<input
@@ -1335,7 +1316,6 @@
                                 }
                             </div>
 
-                            <!-- Right Controls: Editable Due Date, Bullet Indicator, Follow Button -->
                             <div class="flex items-center gap-1 shrink-0">
                                 ${
                                     bulletCount > 0
@@ -1376,7 +1356,6 @@
                             </div>
                         </div>
 
-                        <!-- Double-Click Expanded Bullet Notes Dropdown -->
                         ${
                             isNotesOpen
                                 ? `
@@ -1417,7 +1396,6 @@
                 `;
             }
 
-            // Completed Tasks grouped by Project with collapsible accordions
             function renderCompletedGroupedView(container) {
                 const completedTasks = state.tasks.filter((t) => t.completed);
                 if (completedTasks.length === 0) {
@@ -1467,7 +1445,6 @@
                     .join('');
             }
 
-            // Archived Projects View
             function renderArchivedProjectsView(container) {
                 const archived = state.projects.filter((p) => p.archived);
                 if (archived.length === 0) {
@@ -1513,7 +1490,6 @@
                     .join('');
             }
 
-            // Render Project Notes (Vertical Active Projects + Vertical Note Pages + Editor)
             function renderProjectNotes() {
                 const activeProjects = state.projects.filter((p) => !p.archived);
                 const projSidebar = document.getElementById('notes-projects-sidebar');
@@ -1542,7 +1518,6 @@
                     }
                 }
 
-                // Populate "Line to Task" target project dropdown
                 if (targetSelect) {
                     targetSelect.innerHTML = activeProjects
                         .map(
@@ -1554,7 +1529,6 @@
                         .join('');
                 }
 
-                // Render vertical Active Projects list
                 projSidebar.innerHTML = activeProjects
                     .map((p) => {
                         const selected = p.id === state.selectedProjectId;
@@ -1578,7 +1552,6 @@
                     })
                     .join('');
 
-                // Render vertical Note Pages for selected project
                 const projectNotes = state.notePages.filter((n) => n.projectId === state.selectedProjectId);
                 if (projectNotes.length > 0 && !projectNotes.some((n) => n.id === state.selectedNoteId)) {
                     state.selectedNoteId = projectNotes[0].id;
@@ -1611,7 +1584,6 @@
                             })
                             .join('');
 
-                // Load active note into editor
                 const activeNote = projectNotes.find((n) => n.id === state.selectedNoteId) || null;
                 if (activeNote) {
                     titleInput.disabled = false;
@@ -1634,7 +1606,6 @@
                     if (metaLabel) metaLabel.textContent = 'No note selected';
                 }
 
-                // Handle expanded editor mode
                 const exitExpandBtn = document.getElementById('exit-expanded-editor-btn');
                 if (editorContainer && expandBtn) {
                     if (uiState.expandedEditor) {
@@ -1659,7 +1630,6 @@
                 refreshIcons();
             }
 
-            // Format active note cleanly for email pasting
             function formatNoteForEmail(note, project) {
                 const projPrefix = project
                     ? `${project.code ? `[${project.code}] ` : ''}${project.name}`
@@ -1700,7 +1670,6 @@
                 ta.remove();
             }
 
-            // Render Following Section
             function renderFollowing() {
                 const container = document.getElementById('following-list-container');
                 if (!container) return;
@@ -1792,7 +1761,6 @@
                 refreshIcons();
             }
 
-            // Global Search across Active Tasks, Completed Tasks, Task Bullets, Projects, Note Pages, and Following
             function runGlobalSearch(query) {
                 uiState.searchQuery = query;
                 const panel = document.getElementById('search-results-panel');
@@ -1803,7 +1771,6 @@
                 const q = query.trim().toLowerCase();
                 if (clearBtn) clearBtn.classList.toggle('hidden', !q);
 
-                // Re-render views so inline <mark> highlights stay in sync
                 renderProjectsAndTasks();
                 renderFollowing();
 
@@ -1920,7 +1887,6 @@
                 }
             }
 
-            // Follow a task (from eye icon or drag-and-drop)
             function followTask(taskId) {
                 const task = state.tasks.find((t) => t.id === taskId);
                 if (!task) return;
@@ -1946,7 +1912,6 @@
                 showToast('Added task to Following.', 'success');
             }
 
-            // Move a Following item back into an active project's task list
             function moveFollowingToTask(followingId) {
                 const idx = state.following.findIndex((f) => f.id === followingId);
                 if (idx === -1) return;
@@ -1983,9 +1948,19 @@
                 showToast(`Moved "${item.title}" to ${targetProject.name} tasks.`, 'success');
             }
 
-            // Wire up all DOM event listeners
+            function commitInlineTaskEdit(inputEl) {
+                const tid = inputEl.dataset.taskEditInput;
+                const task = state.tasks.find((t) => t.id === tid);
+                const nextTitle = (inputEl.value || '').trim();
+                uiState.editingTaskId = null;
+                if (task && nextTitle && nextTitle !== task.title) {
+                    task.title = nextTitle;
+                    saveState();
+                }
+                renderProjectsAndTasks();
+            }
+
             function bindEvents() {
-                // Task sub-tabs
                 document.querySelectorAll('.task-tab-btn').forEach((btn) => {
                     btn.addEventListener('click', () => {
                         uiState.taskTab = btn.dataset.taskTab;
@@ -1995,7 +1970,6 @@
                     });
                 });
 
-                // Add project form
                 const addProjForm = document.getElementById('add-project-form');
                 if (addProjForm) {
                     addProjForm.addEventListener('submit', (e) => {
@@ -2018,7 +1992,6 @@
                         state.projects.push(newProj);
                         state.selectedProjectId = newProj.id;
 
-                        // Ensure at least one note page exists for the new project
                         const newNote = {
                             id: uid('note'),
                             projectId: newProj.id,
@@ -2039,11 +2012,9 @@
                     });
                 }
 
-                // Delegated clicks inside Projects & Tasks
                 const tasksContainer = document.getElementById('tasks-view-container');
                 if (tasksContainer) {
                     tasksContainer.addEventListener('click', (e) => {
-                        // Toggle new task star before submit
                         const newStarBtn = e.target.closest('.new-task-star-btn');
                         if (newStarBtn) {
                             const current = newStarBtn.dataset.starred === '1';
@@ -2053,7 +2024,6 @@
                             return;
                         }
 
-                        // Collapse / expand project block
                         const collapseBtn = e.target.closest('[data-toggle-collapse]');
                         if (collapseBtn) {
                             const proj = getProjectById(collapseBtn.dataset.toggleCollapse);
@@ -2065,7 +2035,6 @@
                             return;
                         }
 
-                        // Edit project code
                         const codeBadge = e.target.closest('[data-edit-project-code]');
                         if (codeBadge) {
                             const proj = getProjectById(codeBadge.dataset.editProjectCode);
@@ -2081,7 +2050,6 @@
                             return;
                         }
 
-                        // Rename project
                         const nameEl = e.target.closest('[data-edit-project-name]');
                         if (nameEl) {
                             const proj = getProjectById(nameEl.dataset.editProjectName);
@@ -2097,7 +2065,6 @@
                             return;
                         }
 
-                        // Archive project
                         const archiveBtn = e.target.closest('[data-archive-project]');
                         if (archiveBtn) {
                             const proj = getProjectById(archiveBtn.dataset.archiveProject);
@@ -2111,7 +2078,6 @@
                             return;
                         }
 
-                        // Restore archived project
                         const restoreBtn = e.target.closest('[data-restore-project]');
                         if (restoreBtn) {
                             const proj = getProjectById(restoreBtn.dataset.restoreProject);
@@ -2126,7 +2092,6 @@
                             return;
                         }
 
-                        // Accordion toggle in Completed tab
                         const accBtn = e.target.closest('[data-accordion-completed]');
                         if (accBtn) {
                             const pid = accBtn.dataset.accordionCompleted;
@@ -2135,7 +2100,6 @@
                             return;
                         }
 
-                        // Toggle task importance star
                         const starBtn = e.target.closest('[data-task-star]');
                         if (starBtn) {
                             const task = state.tasks.find((t) => t.id === starBtn.dataset.taskStar);
@@ -2147,14 +2111,12 @@
                             return;
                         }
 
-                        // Follow task via eye button
                         const followBtn = e.target.closest('[data-task-follow]');
                         if (followBtn) {
                             followTask(followBtn.dataset.taskFollow);
                             return;
                         }
 
-                        // Bullet count badge opens bullet notes
                         const bulletBadgeBtn = e.target.closest('[data-task-bullet-toggle]');
                         if (bulletBadgeBtn) {
                             const tid = bulletBadgeBtn.dataset.taskBulletToggle;
@@ -2163,7 +2125,6 @@
                             return;
                         }
 
-                        // Delete task
                         const delTaskBtn = e.target.closest('[data-task-delete]');
                         if (delTaskBtn) {
                             const tid = delTaskBtn.dataset.taskDelete;
@@ -2175,7 +2136,6 @@
                             return;
                         }
 
-                        // Toggle bullet done
                         const bulToggle = e.target.closest('[data-bullet-toggle]');
                         if (bulToggle) {
                             const [tid, bid] = bulToggle.dataset.bulletToggle.split(':');
@@ -2189,7 +2149,6 @@
                             return;
                         }
 
-                        // Delete bullet
                         const bulDel = e.target.closest('[data-bullet-delete]');
                         if (bulDel) {
                             const [tid, bid] = bulDel.dataset.bulletDelete.split(':');
@@ -2202,7 +2161,6 @@
                             return;
                         }
 
-                        // Single-click task title for inline editing
                         const titleEditEl = e.target.closest('[data-task-title-edit]');
                         if (titleEditEl) {
                             uiState.editingTaskId = titleEditEl.dataset.taskTitleEdit;
@@ -2215,7 +2173,6 @@
                         }
                     });
 
-                    // Double-click task row opens/closes bullet notes panel
                     tasksContainer.addEventListener('dblclick', (e) => {
                         if (e.target.closest('input, button, form')) return;
                         const row = e.target.closest('[data-task-row]');
@@ -2229,7 +2186,6 @@
                         }
                     });
 
-                    // Checkbox completion & due date changes
                     tasksContainer.addEventListener('change', (e) => {
                         const compBox = e.target.closest('[data-task-complete]');
                         if (compBox) {
@@ -2257,7 +2213,6 @@
                         }
                     });
 
-                    // Inline add task & add bullet forms
                     tasksContainer.addEventListener('submit', (e) => {
                         const addTaskForm = e.target.closest('.add-task-inline-form');
                         if (addTaskForm) {
@@ -2316,7 +2271,6 @@
                         }
                     });
 
-                    // Inline task title commit on blur or Enter/Escape
                     tasksContainer.addEventListener('keydown', (e) => {
                         const editInput = e.target.closest('[data-task-edit-input]');
                         if (!editInput) return;
@@ -2340,7 +2294,6 @@
                         true
                     );
 
-                    // Drag start from task item
                     tasksContainer.addEventListener('dragstart', (e) => {
                         const wrapper = e.target.closest('[data-task-id]');
                         if (!wrapper) return;
@@ -2349,7 +2302,6 @@
                     });
                 }
 
-                // Outside-click auto-close for expanded task bullet notes dropdown
                 document.addEventListener('click', (e) => {
                     if (!uiState.openTaskNoteId) return;
                     const openPanel = document.querySelector(`[data-task-notes-panel="${uiState.openTaskNoteId}"]`);
@@ -2362,7 +2314,6 @@
                     }
                 });
 
-                // Drag-and-drop into Following section
                 const followingSection = document.getElementById('following-section');
                 if (followingSection) {
                     followingSection.addEventListener('dragover', (e) => {
@@ -2385,7 +2336,6 @@
                     });
                 }
 
-                // Add Following form
                 const addFolForm = document.getElementById('add-following-form');
                 if (addFolForm) {
                     addFolForm.addEventListener('submit', (e) => {
@@ -2421,7 +2371,6 @@
                     });
                 }
 
-                // Following list interactions
                 const folList = document.getElementById('following-list-container');
                 if (folList) {
                     folList.addEventListener('change', (e) => {
@@ -2431,7 +2380,6 @@
                             if (itemIdx !== -1) {
                                 const item = state.following[itemIdx];
                                 if (toggle.checked) {
-                                    // Completed Following items move directly into Completed tasks
                                     const activeProjects = state.projects.filter((p) => !p.archived);
                                     const matchedByCode = item.projectCode
                                         ? activeProjects.find((p) => (p.code || '').toUpperCase() === item.projectCode.toUpperCase())
@@ -2506,7 +2454,6 @@
                     });
                 }
 
-                // Project Notes sidebar & editor events
                 document.getElementById('notes-projects-sidebar')?.addEventListener('click', (e) => {
                     const btn = e.target.closest('[data-select-note-project]');
                     if (!btn) return;
@@ -2529,7 +2476,6 @@
                     if (!state.selectedProjectId) return;
                     const tplSelect = document.getElementById('new-note-template-select');
                     const tpl = tplSelect?.value || 'blank';
-                    const proj = getProjectById(state.selectedProjectId);
                     const dateStr = todayYmd();
 
                     let title = 'New Note';
@@ -2537,25 +2483,10 @@
 
                     if (tpl === 'meeting') {
                         title = `Meeting (${dateStr})`;
-                        content = [
-                            'Topic:',
-                            '- ',
-                            '',
-                            'Notes:',
-                            '- ',
-                            '',
-                            'Action Items:',
-                            '- '
-                        ].join('\n');
+                        content = ['Topic:', '- ', '', 'Notes:', '- ', '', 'Action Items:', '- '].join('\n');
                     } else if (tpl === 'decision') {
                         title = `Decisions & Actions (${dateStr})`;
-                        content = [
-                            'Decisions Made:',
-                            '- ',
-                            '',
-                            'Next Steps:',
-                            '- [ ] '
-                        ].join('\n');
+                        content = ['Decisions Made:', '- ', '', 'Next Steps:', '- [ ] '].join('\n');
                     }
 
                     const newPage = {
@@ -2583,7 +2514,6 @@
                     if (contentTextarea) note.content = contentTextarea.value;
                     note.updatedAt = nowIso();
                     saveState();
-                    // Refresh note page list titles without losing textarea cursor position
                     const pagesSidebar = document.getElementById('notes-pages-sidebar');
                     if (pagesSidebar) {
                         const projectNotes = state.notePages.filter((n) => n.projectId === state.selectedProjectId);
@@ -2614,7 +2544,6 @@
                 titleInput?.addEventListener('input', persistActiveNoteEdit);
                 contentTextarea?.addEventListener('input', persistActiveNoteEdit);
 
-                // Copy note formatted for email
                 document.getElementById('copy-note-email-btn')?.addEventListener('click', () => {
                     const note = state.notePages.find((n) => n.id === state.selectedNoteId);
                     if (!note) return;
@@ -2622,7 +2551,6 @@
                     copyTextToClipboard(formatNoteForEmail(note, proj), 'Copied note formatted for email!');
                 });
 
-                // Duplicate note page
                 document.getElementById('duplicate-note-page-btn')?.addEventListener('click', () => {
                     const note = state.notePages.find((n) => n.id === state.selectedNoteId);
                     if (!note) return;
@@ -2641,7 +2569,6 @@
                     showToast('Note page duplicated.', 'success');
                 });
 
-                // Delete note page
                 document.getElementById('delete-note-page-btn')?.addEventListener('click', () => {
                     if (!state.selectedNoteId) return;
                     state.notePages = state.notePages.filter((n) => n.id !== state.selectedNoteId);
@@ -2652,7 +2579,6 @@
                     showToast('Note page removed.');
                 });
 
-                // Expand / collapse editor modal view
                 document.getElementById('toggle-expand-editor-btn')?.addEventListener('click', () => {
                     uiState.expandedEditor = !uiState.expandedEditor;
                     renderProjectNotes();
@@ -2670,7 +2596,6 @@
                     }
                 });
 
-                // Convert selected or current line in note textarea into a task in selected target project
                 document.getElementById('send-line-to-task-btn')?.addEventListener('click', () => {
                     const ta = document.getElementById('note-content-textarea');
                     const targetSelect = document.getElementById('note-target-project-select');
@@ -2706,7 +2631,6 @@
                     showToast(`Converted line to task: "${lineText}"`, 'success');
                 });
 
-                // Global Search input
                 const searchInput = document.getElementById('global-search-input');
                 searchInput?.addEventListener('input', (e) => {
                     runGlobalSearch(e.target.value);
@@ -2749,7 +2673,7 @@
                         a.remove();
                         URL.revokeObjectURL(url);
                         showToast('Backup JSON downloaded.', 'success');
-                    } catch (err) {
+                    } catch {
                         showToast('Failed to download backup.', 'error');
                     }
                 });
@@ -2794,9 +2718,11 @@
                 // Device Sync Modal
                 const syncModal = document.getElementById('sync-modal');
                 const syncCodeInput = document.getElementById('sync-code-input');
+                const fbConfigInput = document.getElementById('firebase-config-input');
 
                 document.getElementById('open-sync-modal-btn')?.addEventListener('click', () => {
                     if (syncCodeInput) syncCodeInput.value = state.syncCode || '';
+                    if (fbConfigInput) fbConfigInput.value = customFirebaseJson || '';
                     updateSyncIndicator();
                     syncModal?.classList.remove('hidden');
                     refreshIcons();
@@ -2807,13 +2733,32 @@
                 });
 
                 document.getElementById('save-sync-code-btn')?.addEventListener('click', async () => {
-                    state.syncCode = (syncCodeInput?.value || '').trim();
+                    const nextCode = (syncCodeInput?.value || '').trim();
+                    const nextFbRaw = (fbConfigInput?.value || '').trim();
+
+                    if (nextFbRaw) {
+                        try {
+                            JSON.parse(nextFbRaw);
+                            customFirebaseJson = nextFbRaw;
+                            localStorage.setItem(CUSTOM_FB_KEY, customFirebaseJson);
+                        } catch {
+                            showToast('Firebase Config JSON is not valid JSON.', 'error');
+                            return;
+                        }
+                    } else {
+                        customFirebaseJson = '';
+                        localStorage.removeItem(CUSTOM_FB_KEY);
+                    }
+
+                    state.syncCode = nextCode;
                     saveState(true, false);
                     updateSyncIndicator();
+
                     if (state.syncCode) {
+                        await initCloudBackend();
                         attachSyncListener(state.syncCode);
                         await pushStateNowToCloud(state.syncCode);
-                        showToast(`Auto-sync active for "${state.syncCode}".`, 'success');
+                        showToast(`Sync settings saved for "${state.syncCode}".`, 'success');
                     } else {
                         detachSyncListener();
                         showToast('Local mode active.', 'success');
@@ -2828,18 +2773,6 @@
                     updateSyncIndicator();
                     showToast('Switched to Local Only mode.');
                 });
-            }
-
-            function commitInlineTaskEdit(inputEl) {
-                const tid = inputEl.dataset.taskEditInput;
-                const task = state.tasks.find((t) => t.id === tid);
-                const nextTitle = (inputEl.value || '').trim();
-                uiState.editingTaskId = null;
-                if (task && nextTitle && nextTitle !== task.title) {
-                    task.title = nextTitle;
-                    saveState();
-                }
-                renderProjectsAndTasks();
             }
 
             function renderAll() {
