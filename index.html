@@ -2810,6 +2810,14 @@
                 document.getElementById('open-sync-modal-btn')?.addEventListener('click', () => {
                     if (syncCodeInput) syncCodeInput.value = state.syncCode || '';
                     updateSyncIndicator();
+                    syncModal?.classList.remove('hidden');
+                    refreshIcons();
+                });
+
+                document.getElementById('close-sync-modal-btn')?.addEventListener('click', () => {
+                    syncModal?.classList.add('hidden');
+                });
+
                 document.getElementById('save-sync-code-btn')?.addEventListener('click', async () => {
                     state.syncCode = (syncCodeInput?.value || '').trim();
                     saveState(true, false);
