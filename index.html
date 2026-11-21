@@ -2349,18 +2349,6 @@
                     });
                 }
 
-                function commitInlineTaskEdit(inputEl) {
-                    const tid = inputEl.dataset.taskEditInput;
-                    const task = state.tasks.find((t) => t.id === tid);
-                    const nextTitle = (inputEl.value || '').trim();
-                    uiState.editingTaskId = null;
-                    if (task && nextTitle && nextTitle !== task.title) {
-                        task.title = nextTitle;
-                        saveState();
-                    }
-                    renderProjectsAndTasks();
-                }
-
                 // Outside-click auto-close for expanded task bullet notes dropdown
                 document.addEventListener('click', (e) => {
                     if (!uiState.openTaskNoteId) return;
@@ -2840,6 +2828,18 @@
                     updateSyncIndicator();
                     showToast('Switched to Local Only mode.');
                 });
+            }
+
+            function commitInlineTaskEdit(inputEl) {
+                const tid = inputEl.dataset.taskEditInput;
+                const task = state.tasks.find((t) => t.id === tid);
+                const nextTitle = (inputEl.value || '').trim();
+                uiState.editingTaskId = null;
+                if (task && nextTitle && nextTitle !== task.title) {
+                    task.title = nextTitle;
+                    saveState();
+                }
+                renderProjectsAndTasks();
             }
 
             function renderAll() {
