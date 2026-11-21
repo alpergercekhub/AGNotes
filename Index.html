@@ -1,0 +1,2860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Focus &amp; Notes</title>
+    <!-- Tailwind CSS for responsive layout and modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons for crisp UI controls -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Inter Font Family -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDKs for cross-device real-time sync -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.__CLOUD_SYNC_API__ = {
+            initializeApp,
+            getAuth,
+            signInAnonymously,
+            signInWithCustomToken,
+            getFirestore,
+            doc,
+            setDoc,
+            getDoc,
+            onSnapshot
+        };
+        window.dispatchEvent(new Event('cloud-sync-ready'));
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        svg.lucide {
+            display: inline-block;
+            vertical-align: middle;
+        }
+        mark.search-hit {
+            background-color: #fef08a;
+            color: #0f172a;
+            padding: 0 2px;
+            border-radius: 3px;
+        }
+        .drag-over-zone {
+            outline: 2px dashed #4f46e5;
+            outline-offset: -2px;
+            background-color: #eef2ff !important;
+        }
+        /* Subtle custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900">
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Top Navigation & Global Search Header -->
+    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 sm:px-5 py-2.5">
+        <div class="max-w-[1680px] mx-auto flex flex-wrap items-center justify-between gap-2.5">
+            <!-- Brand & Sync Status -->
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                    <i data-lucide="check-square" class="w-4 h-4"></i>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-sm sm:text-base font-bold text-slate-900 truncate">Personal Focus &amp; Notes</h1>
+                        <span id="sync-status-pill" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                            <span id="sync-status-dot" class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                            <span id="sync-status-label">Local Saved</span>
+                        </span>
+                    </div>
+                    <p id="header-date-label" class="text-[11px] text-slate-500 truncate"></p>
+                </div>
+            </div>
+
+            <!-- Global Search Bar -->
+            <div class="relative flex-1 max-w-md min-w-[190px]">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input
+                    id="global-search-input"
+                    type="text"
+                    placeholder="Search tasks, bullets, projects, notes, following..."
+                    class="w-full pl-9 pr-8 py-1.5 text-xs sm:text-sm bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none transition"
+                >
+                <button
+                    id="clear-search-btn"
+                    type="button"
+                    title="Clear search"
+                    class="hidden absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                >
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+
+            <!-- Header Action Buttons -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <button
+                    id="open-sync-modal-btn"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl transition cursor-pointer"
+                >
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-indigo-600"></i>
+                    <span class="hidden sm:inline">Device Sync</span>
+                </button>
+                <button
+                    id="open-backup-modal-btn"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition cursor-pointer"
+                >
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    <span>Backup / Restore</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Global Search Results Dropdown -->
+        <div id="search-results-panel" class="hidden max-w-[1680px] mx-auto mt-2 bg-white border border-slate-200 rounded-2xl shadow-lg p-3 max-h-80 overflow-y-auto">
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                <span id="search-results-summary" class="text-xs font-semibold text-slate-600">Search Results</span>
+                <button id="close-search-results-btn" type="button" class="text-xs text-slate-500 hover:text-slate-800">Close</button>
+            </div>
+            <div id="search-results-list" class="space-y-2 text-xs"></div>
+        </div>
+    </header>
+
+    <!-- Main 50/50 Split Workspace: Left = Projects & Tasks | Right = Project Notes + Following -->
+    <main class="max-w-[1680px] mx-auto p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        <!-- LEFT HALF (6 cols): Projects & Tasks -->
+        <section id="projects-tasks-column" class="lg:col-span-6 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden">
+            <!-- Top Bar & Sub-tabs -->
+            <div class="px-3.5 py-2.5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700">
+                        <i data-lucide="folder-kanban" class="w-3.5 h-3.5"></i>
+                    </span>
+                    <h2 class="text-sm font-bold text-slate-800">Projects &amp; Tasks</h2>
+                </div>
+
+                <!-- Sub-navigation Tabs -->
+                <div class="inline-flex bg-slate-200/80 p-0.5 rounded-xl text-xs font-medium">
+                    <button
+                        type="button"
+                        data-task-tab="active"
+                        class="task-tab-btn px-2.5 py-1 rounded-lg bg-white text-slate-900 shadow-2xs transition cursor-pointer"
+                    >
+                        Active <span id="count-active-tasks" class="ml-1 text-[10px] text-slate-500">0</span>
+                    </button>
+                    <button
+                        type="button"
+                        data-task-tab="completed"
+                        class="task-tab-btn px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                    >
+                        Completed <span id="count-completed-tasks" class="ml-1 text-[10px] text-slate-500">0</span>
+                    </button>
+                    <button
+                        type="button"
+                        data-task-tab="archived"
+                        class="task-tab-btn px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                    >
+                        Archived <span id="count-archived-projects" class="ml-1 text-[10px] text-slate-500">0</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Add New Project Form (shown on Active tab) -->
+            <form id="add-project-form" class="px-3.5 py-2 border-b border-slate-100 bg-white flex flex-wrap sm:flex-nowrap items-center gap-1.5">
+                <input
+                    id="new-project-code"
+                    type="text"
+                    maxlength="12"
+                    placeholder="Code (e.g. PRJ-01)"
+                    class="w-28 sm:w-28 px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg outline-none uppercase"
+                >
+                <input
+                    id="new-project-name"
+                    type="text"
+                    required
+                    placeholder="New project name..."
+                    class="flex-1 min-w-[140px] px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg outline-none"
+                >
+                <button
+                    type="submit"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition shrink-0 cursor-pointer"
+                >
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    <span>Add Project</span>
+                </button>
+            </form>
+
+            <!-- Scrollable Vertical Project Blocks Container -->
+            <div id="tasks-view-container" class="p-3 space-y-3 max-h-[calc(100vh-11.5rem)] min-h-[420px] overflow-y-auto"></div>
+        </section>
+
+        <!-- RIGHT HALF (6 cols): Stacked Project Notes (top) & Following (bottom) -->
+        <div class="lg:col-span-6 flex flex-col gap-4">
+            <!-- TOP-RIGHT: Project Notes -->
+            <section id="project-notes-section" class="bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden">
+                <div class="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 shrink-0">
+                            <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                        </span>
+                        <h2 class="text-sm font-bold text-slate-800 truncate">Project Notes</h2>
+                        <span id="active-note-project-badge" class="hidden sm:inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-md bg-slate-200/80 text-slate-700 truncate max-w-[200px]"></span>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span id="note-autosave-status" class="text-[11px] text-slate-400">Auto-saved</span>
+                        <button
+                            id="toggle-expand-editor-btn"
+                            type="button"
+                            class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition cursor-pointer"
+                        >
+                            <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+                            <span>Expand Editor</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3-Pane Notes Body: Vertical Active Projects | Vertical Note Pages | Long-Form Editor -->
+                <div class="grid grid-cols-1 sm:grid-cols-12 min-h-[540px] max-h-[740px]">
+                    <!-- Pane 1: Vertical Active Projects Sidebar -->
+                    <aside class="sm:col-span-3 border-b sm:border-b-0 sm:border-r border-slate-200 bg-slate-50/50 flex flex-col max-h-40 sm:max-h-full overflow-y-auto">
+                        <div class="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                            Active Projects
+                        </div>
+                        <div id="notes-projects-sidebar" class="p-1.5 space-y-1"></div>
+                    </aside>
+
+                    <!-- Pane 2: Vertical Note Pages for Selected Project -->
+                    <aside class="sm:col-span-3 border-b sm:border-b-0 sm:border-r border-slate-200 bg-white flex flex-col max-h-44 sm:max-h-full overflow-hidden">
+                        <div class="p-1.5 border-b border-slate-100 flex items-center gap-1">
+                            <select
+                                id="new-note-template-select"
+                                aria-label="Note template"
+                                class="flex-1 min-w-0 px-1.5 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-lg outline-none"
+                            >
+                                <option value="blank">Blank Note</option>
+                                <option value="meeting">Meeting Notes</option>
+                                <option value="decision">Decisions &amp; Actions</option>
+                            </select>
+                            <button
+                                id="create-note-page-btn"
+                                type="button"
+                                title="Create new note page"
+                                class="inline-flex items-center gap-0.5 px-2 py-1 text-[11px] font-semibold bg-slate-900 hover:bg-slate-800 text-white rounded-lg shrink-0 cursor-pointer"
+                            >
+                                <i data-lucide="plus" class="w-3 h-3"></i>
+                                <span>New</span>
+                            </button>
+                        </div>
+                        <div id="notes-pages-sidebar" class="flex-1 p-1.5 space-y-1 overflow-y-auto"></div>
+                    </aside>
+
+                    <!-- Pane 3: Long-Form Note Editor -->
+                    <div id="note-editor-container" class="sm:col-span-6 flex flex-col bg-white overflow-hidden">
+                        <div class="px-3 py-2 border-b border-slate-100 flex flex-wrap items-center justify-between gap-1.5">
+                            <input
+                                id="note-page-title-input"
+                                type="text"
+                                placeholder="Note title..."
+                                class="flex-1 min-w-[130px] text-xs sm:text-sm font-semibold text-slate-800 bg-transparent border-b border-transparent focus:border-indigo-400 outline-none py-0.5"
+                            >
+                            <div class="flex items-center gap-1">
+                                <button
+                                    id="exit-expanded-editor-btn"
+                                    type="button"
+                                    title="Collapse editor back to panel"
+                                    class="hidden items-center gap-1 px-2 py-1 text-[11px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg transition cursor-pointer"
+                                >
+                                    <i data-lucide="minimize-2" class="w-3 h-3"></i>
+                                    <span>Collapse</span>
+                                </button>
+                                <button
+                                    id="copy-note-email-btn"
+                                    type="button"
+                                    title="Copy formatted note for email"
+                                    class="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition cursor-pointer"
+                                >
+                                    <i data-lucide="mail" class="w-3 h-3"></i>
+                                    <span>Copy for Email</span>
+                                </button>
+                                <button
+                                    id="duplicate-note-page-btn"
+                                    type="button"
+                                    title="Duplicate note page"
+                                    class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                                >
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                                <button
+                                    id="delete-note-page-btn"
+                                    type="button"
+                                    title="Delete note page"
+                                    class="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                >
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Convert Selected/Current Line to Project Task Bar -->
+                        <div class="px-3 py-1.5 bg-slate-50/80 border-b border-slate-100 flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                            <span id="note-page-meta" class="text-slate-400 truncate">No note selected</span>
+                            <div class="flex items-center gap-1">
+                                <select
+                                    id="note-target-project-select"
+                                    class="px-1.5 py-0.5 text-[11px] bg-white border border-slate-200 rounded-md outline-none max-w-[140px]"
+                                ></select>
+                                <button
+                                    id="send-line-to-task-btn"
+                                    type="button"
+                                    class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md transition cursor-pointer"
+                                >
+                                    <i data-lucide="corner-up-left" class="w-3 h-3"></i>
+                                    <span>Line to Task</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Spacious Textarea for Long-Form & Meeting Notes -->
+                        <textarea
+                            id="note-content-textarea"
+                            placeholder="Write long-form notes, meeting minutes, owners, dates, or action items..."
+                            class="flex-1 w-full p-3 text-xs sm:text-sm leading-relaxed text-slate-700 resize-none outline-none"
+                        ></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- BOTTOM-RIGHT: Following / Watchlist -->
+            <section
+                id="following-section"
+                class="bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden transition"
+            >
+                <div class="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-amber-100 text-amber-700">
+                            <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                        </span>
+                        <h2 class="text-sm font-bold text-slate-800">Following</h2>
+                        <span id="following-count-badge" class="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-slate-200/80 text-slate-700">0</span>
+                    </div>
+                    <span class="text-[11px] text-slate-400 hidden sm:inline">Drag tasks here or add follow-ups below</span>
+                </div>
+
+                <!-- Add Follow-up Form with Project Code -->
+                <form id="add-following-form" class="px-3 py-2 border-b border-slate-100 flex flex-wrap sm:flex-nowrap items-center gap-1.5">
+                    <input
+                        id="following-project-code"
+                        type="text"
+                        list="project-code-suggestions"
+                        maxlength="14"
+                        placeholder="Proj Code"
+                        class="w-24 px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg outline-none uppercase"
+                    >
+                    <datalist id="project-code-suggestions"></datalist>
+                    <input
+                        id="following-title-input"
+                        type="text"
+                        required
+                        placeholder="Follow-up item or waiting on..."
+                        class="flex-1 min-w-[140px] px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg outline-none"
+                    >
+                    <input
+                        id="following-owner-input"
+                        type="text"
+                        placeholder="Owner"
+                        class="w-24 sm:w-28 px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg outline-none"
+                    >
+                    <input
+                        id="following-due-input"
+                        type="date"
+                        class="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg outline-none"
+                    >
+                    <button
+                        type="submit"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition shrink-0 cursor-pointer"
+                    >
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        <span>Follow</span>
+                    </button>
+                </form>
+
+                <!-- Following Items List -->
+                <div id="following-list-container" class="p-2.5 space-y-1.5 max-h-[300px] min-h-[140px] overflow-y-auto"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Backup & Restore Modal -->
+    <div id="backup-modal" class="hidden fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-2xs flex items-center justify-center p-4">
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-lg w-full p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <h3 class="text-sm font-bold text-slate-900">Backup &amp; Restore Workspace (JSON)</h3>
+                <button id="close-backup-modal-btn" type="button" class="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+                Your data saves automatically in this browser. Export a JSON backup file before major browser resets or import a backup file to restore your projects, tasks, notes, and following items.
+            </p>
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                    id="download-backup-btn"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer"
+                >
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    <span>Download JSON Backup</span>
+                </button>
+                <label class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl transition cursor-pointer">
+                    <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                    <span>Restore from File</span>
+                    <input id="restore-file-input" type="file" accept="application/json,.json" class="hidden">
+                </label>
+            </div>
+            <div class="pt-2 border-t border-slate-100">
+                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Or Paste JSON Snapshot Directly</label>
+                <textarea
+                    id="backup-json-textarea"
+                    rows="5"
+                    class="w-full p-2 text-[11px] font-mono bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                    placeholder='{"projects": ...}'
+                ></textarea>
+                <div class="mt-2 flex justify-end gap-2">
+                    <button id="copy-json-btn" type="button" class="px-2.5 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer">Copy JSON</button>
+                    <button id="apply-pasted-json-btn" type="button" class="px-3 py-1 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white rounded-lg cursor-pointer">Apply JSON</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Sync Modal (Workspace Room Code via KV/Local Sync) -->
+    <div id="sync-modal" class="hidden fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-2xs flex items-center justify-center p-4">
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-md w-full p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <h3 class="text-sm font-bold text-slate-900">Device Sync Code</h3>
+                <button id="close-sync-modal-btn" type="button" class="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+                Set a private workspace code to automatically sync across your laptop and phone in real time. Everything also remains safely saved locally in your browser.
+            </p>
+            <div class="space-y-2">
+                <label class="block text-xs font-semibold text-slate-700">Workspace Code</label>
+                <div class="flex gap-2">
+                    <input
+                        id="sync-code-input"
+                        type="text"
+                        placeholder="e.g. my-focus-2026"
+                        class="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-xl outline-none"
+                    >
+                    <button
+                        id="save-sync-code-btn"
+                        type="button"
+                        class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer"
+                    >
+                        Save Code
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                <span id="last-saved-timestamp" class="text-slate-400"></span>
+                <button
+                    id="clear-sync-code-btn"
+                    type="button"
+                    class="text-rose-600 hover:underline font-medium cursor-pointer"
+                >
+                    Local Only Mode
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Personal Focus & Notes
+         * Single-file application managing:
+         * - Soft pastel project blocks (Active, Completed grouped by project with accordion, Archived)
+         * - Inline task title editing, editable due dates with overdue red styling, star importance,
+         *   double-click bullet notes with outside-click auto-close
+         * - Project-based vertical sidebar for Active Projects + Note Pages, long-form editor,
+         *   expandable editor mode, Copy for Email formatting, and converting lines into tasks
+         * - Following section supporting drag-and-drop from tasks, eye-icon follow, and project codes
+         * - Global search across all workspace items and JSON backup/restore
+         */
+        (function () {
+            'use strict';
+
+            const STORAGE_KEY = 'personal_focus_notes_v2';
+            const LEGACY_KEYS = ['personal_focus_notes_v1', 'focus_notes_state', 'task_notes_app_data'];
+            const appId = typeof __app_id !== 'undefined' && __app_id ? String(__app_id) : 'personal-focus-notes-app';
+
+            // Soft, low-contrast pastel palette for project headers
+            const PASTEL_PALETTES = [
+                { id: 'indigo', headerBg: '#EEF2FF', headerBorder: '#C7D2FE', badgeBg: '#E0E7FF', badgeText: '#3730A3' },
+                { id: 'emerald', headerBg: '#ECFDF5', headerBorder: '#A7F3D0', badgeBg: '#D1FAE5', badgeText: '#065F46' },
+                { id: 'amber', headerBg: '#FFFBEB', headerBorder: '#FDE68A', badgeBg: '#FEF3C7', badgeText: '#92400E' },
+                { id: 'rose', headerBg: '#FFF1F2', headerBorder: '#FECDD3', badgeBg: '#FFE4E6', badgeText: '#9F1239' },
+                { id: 'cyan', headerBg: '#ECFEFF', headerBorder: '#A5F3FC', badgeBg: '#CFFAFE', badgeText: '#155E75' },
+                { id: 'violet', headerBg: '#F5F3FF', headerBorder: '#DDD6FE', badgeBg: '#EDE9FE', badgeText: '#5B21B6' }
+            ];
+
+            // UI state (not persisted)
+            const uiState = {
+                taskTab: 'active', // 'active' | 'completed' | 'archived'
+                openTaskNoteId: null, // task id whose double-click bullet panel is open
+                editingTaskId: null, // task id currently editing title inline
+                collapsedCompletedProjects: {}, // { [projectId]: boolean }
+                expandedEditor: false,
+                searchQuery: '',
+                lastSavedAt: null,
+                syncMode: 'local', // 'local' | 'connecting' | 'synced' | 'error'
+                syncErrorMsg: ''
+            };
+
+            let state = createDefaultState();
+            let cloudDb = null;
+            let cloudUser = null;
+            let cloudUnsubscribe = null;
+            let cloudWriteTimer = null;
+            let isApplyingRemoteSnapshot = false;
+            let lastRemoteRevision = 0;
+
+            function uid(prefix = 'id') {
+                return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+            }
+
+            function nowIso() {
+                return new Date().toISOString();
+            }
+
+            function todayYmd() {
+                const d = new Date();
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            function isOverdue(dueDate, completed) {
+                if (!dueDate || completed) return false;
+                return dueDate < todayYmd();
+            }
+
+            function createDefaultState() {
+                const generalId = uid('proj');
+                const noteId = uid('note');
+                return {
+                    syncCode: '',
+                    projects: [
+                        {
+                            id: generalId,
+                            code: 'GEN',
+                            name: 'General Tasks',
+                            paletteIndex: 0,
+                            collapsed: false,
+                            archived: false,
+                            createdAt: nowIso()
+                        }
+                    ],
+                    tasks: [],
+                    notePages: [
+                        {
+                            id: noteId,
+                            projectId: generalId,
+                            template: 'blank',
+                            title: 'General Notes',
+                            content: '',
+                            updatedAt: nowIso()
+                        }
+                    ],
+                    selectedProjectId: generalId,
+                    selectedNoteId: noteId,
+                    following: [],
+                    updatedRevision: 0
+                };
+            }
+
+            // Safely refresh Lucide SVG icons
+            function refreshIcons() {
+                try {
+                    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                        window.lucide.createIcons();
+                    }
+                } catch (err) {
+                    console.warn('Icon refresh warning:', err);
+                }
+            }
+
+            // Show non-blocking toast message
+            function showToast(message, type = 'info') {
+                const container = document.getElementById('toast-container');
+                if (!container) return;
+                const el = document.createElement('div');
+                const colorClass =
+                    type === 'error'
+                        ? 'bg-rose-900 text-white'
+                        : type === 'success'
+                        ? 'bg-emerald-900 text-white'
+                        : 'bg-slate-900 text-white';
+                el.className = `${colorClass} px-3.5 py-2 rounded-xl shadow-lg text-xs font-medium pointer-events-auto transition-all`;
+                el.textContent = message;
+                container.appendChild(el);
+                setTimeout(() => {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 220);
+                }, 2600);
+            }
+
+            // Normalize and migrate data from current or legacy keys
+            function normalizeLoadedData(raw) {
+                const base = createDefaultState();
+                if (!raw || typeof raw !== 'object') return base;
+
+                const projects = Array.isArray(raw.projects) && raw.projects.length > 0
+                    ? raw.projects.map((p, idx) => ({
+                        id: String(p.id || uid('proj')),
+                        code: String(p.code || '').trim().toUpperCase(),
+                        name: String(p.name || 'Untitled Project').trim() || 'Untitled Project',
+                        paletteIndex: typeof p.paletteIndex === 'number' ? p.paletteIndex : idx % PASTEL_PALETTES.length,
+                        collapsed: Boolean(p.collapsed),
+                        archived: Boolean(p.archived),
+                        createdAt: p.createdAt || nowIso()
+                    }))
+                    : base.projects;
+
+                const validProjectIds = new Set(projects.map((p) => p.id));
+                const fallbackProjectId = projects[0].id;
+
+                const tasks = Array.isArray(raw.tasks)
+                    ? raw.tasks.map((t) => {
+                        // Migrate legacy string notes into bullet items if needed
+                        let bullets = [];
+                        if (Array.isArray(t.bullets)) {
+                            bullets = t.bullets.map((b) => ({
+                                id: String(b.id || uid('bul')),
+                                text: String(b.text || ''),
+                                done: Boolean(b.done)
+                            }));
+                        } else if (typeof t.notes === 'string' && t.notes.trim()) {
+                            bullets = t.notes
+                                .split('\n')
+                                .map((line) => line.trim())
+                                .filter(Boolean)
+                                .map((line) => ({ id: uid('bul'), text: line, done: false }));
+                        }
+
+                        return {
+                            id: String(t.id || uid('task')),
+                            projectId: validProjectIds.has(t.projectId) ? t.projectId : fallbackProjectId,
+                            title: String(t.title || 'Untitled Task').trim() || 'Untitled Task',
+                            dueDate: t.dueDate ? String(t.dueDate).slice(0, 10) : '',
+                            starred: Boolean(t.starred),
+                            completed: Boolean(t.completed),
+                            completedAt: t.completedAt || null,
+                            bullets,
+                            createdAt: t.createdAt || nowIso()
+                        };
+                    })
+                    : [];
+
+                let notePages = [];
+                if (Array.isArray(raw.notePages) && raw.notePages.length > 0) {
+                    notePages = raw.notePages.map((n) => ({
+                        id: String(n.id || uid('note')),
+                        projectId: validProjectIds.has(n.projectId) ? n.projectId : fallbackProjectId,
+                        template: ['blank', 'meeting', 'decision'].includes(n.template) ? n.template : 'blank',
+                        title: String(n.title || 'Untitled Note').trim() || 'Untitled Note',
+                        content: String(n.content || ''),
+                        updatedAt: n.updatedAt || nowIso()
+                    }));
+                } else if (Array.isArray(raw.weeks) && raw.weeks.length > 0) {
+                    // Migrate older weekly notes structure into project note pages
+                    raw.weeks.forEach((w) => {
+                        const weekLabel = w.label || 'Week Note';
+                        if (w.notesByProject && typeof w.notesByProject === 'object') {
+                            Object.entries(w.notesByProject).forEach(([pid, pagesOrText]) => {
+                                const targetPid = validProjectIds.has(pid) ? pid : fallbackProjectId;
+                                if (Array.isArray(pagesOrText)) {
+                                    pagesOrText.forEach((pg) => {
+                                        notePages.push({
+                                            id: uid('note'),
+                                            projectId: targetPid,
+                                            template: 'blank',
+                                            title: `${weekLabel} - ${pg.title || 'Note'}`,
+                                            content: String(pg.content || ''),
+                                            updatedAt: nowIso()
+                                        });
+                                    });
+                                } else if (typeof pagesOrText === 'string' && pagesOrText.trim()) {
+                                    notePages.push({
+                                        id: uid('note'),
+                                        projectId: targetPid,
+                                        template: 'blank',
+                                        title: weekLabel,
+                                        content: pagesOrText,
+                                        updatedAt: nowIso()
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+
+                if (notePages.length === 0) {
+                    notePages = [
+                        {
+                            id: uid('note'),
+                            projectId: fallbackProjectId,
+                            template: 'blank',
+                            title: 'General Notes',
+                            content: '',
+                            updatedAt: nowIso()
+                        }
+                    ];
+                }
+
+                const following = Array.isArray(raw.following)
+                    ? raw.following.map((f) => ({
+                        id: String(f.id || uid('fol')),
+                        projectCode: String(f.projectCode || '').trim().toUpperCase(),
+                        title: String(f.title || '').trim() || 'Follow-up item',
+                        owner: String(f.owner || '').trim(),
+                        dueDate: f.dueDate ? String(f.dueDate).slice(0, 10) : '',
+                        done: Boolean(f.done),
+                        notes: String(f.notes || ''),
+                        sourceTaskId: f.sourceTaskId || null,
+                        createdAt: f.createdAt || nowIso()
+                    }))
+                    : [];
+
+                const activeProjects = projects.filter((p) => !p.archived);
+                const selectedProjectId =
+                    activeProjects.some((p) => p.id === raw.selectedProjectId)
+                        ? raw.selectedProjectId
+                        : activeProjects[0]?.id || fallbackProjectId;
+
+                const projectNotes = notePages.filter((n) => n.projectId === selectedProjectId);
+                const selectedNoteId =
+                    projectNotes.some((n) => n.id === raw.selectedNoteId)
+                        ? raw.selectedNoteId
+                        : projectNotes[0]?.id || notePages[0].id;
+
+                return {
+                    syncCode: String(raw.syncCode || ''),
+                    projects,
+                    tasks,
+                    notePages,
+                    selectedProjectId,
+                    selectedNoteId,
+                    following,
+                    updatedRevision: Number(raw.updatedRevision || 0) || 0
+                };
+            }
+
+            function loadState() {
+                try {
+                    const currentRaw = localStorage.getItem(STORAGE_KEY);
+                    if (currentRaw) {
+                        state = normalizeLoadedData(JSON.parse(currentRaw));
+                        lastRemoteRevision = state.updatedRevision || 0;
+                        return;
+                    }
+                    for (const legacyKey of LEGACY_KEYS) {
+                        const legacyRaw = localStorage.getItem(legacyKey);
+                        if (legacyRaw) {
+                            state = normalizeLoadedData(JSON.parse(legacyRaw));
+                            lastRemoteRevision = state.updatedRevision || 0;
+                            saveState(false, false);
+                            return;
+                        }
+                    }
+                    state = createDefaultState();
+                    lastRemoteRevision = 0;
+                    saveState(false, false);
+                } catch (err) {
+                    console.error('Failed to load state:', err);
+                    state = createDefaultState();
+                    showToast('Recovered default workspace after storage read issue.', 'error');
+                }
+            }
+
+            function saveState(shouldRenderHeader = true, allowCloudPush = true) {
+                if (!isApplyingRemoteSnapshot) {
+                    state.updatedRevision = Date.now();
+                    lastRemoteRevision = state.updatedRevision;
+                }
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                    uiState.lastSavedAt = new Date();
+                    if (shouldRenderHeader) {
+                        updateSyncIndicator();
+                    }
+                    if (allowCloudPush && !isApplyingRemoteSnapshot && state.syncCode) {
+                        scheduleCloudPush();
+                    }
+                } catch (err) {
+                    console.error('Failed to save state:', err);
+                    showToast('Could not save changes to browser storage.', 'error');
+                }
+            }
+
+            // Initialize Firebase Auth & Firestore when config is available
+            async function initCloudBackend() {
+                const api = window.__CLOUD_SYNC_API__;
+                if (!api || typeof __firebase_config === 'undefined' || !__firebase_config) {
+                    return;
+                }
+                try {
+                    const firebaseConfig = typeof __firebase_config === 'string'
+                        ? JSON.parse(__firebase_config)
+                        : __firebase_config;
+                    if (!firebaseConfig || !firebaseConfig.apiKey) return;
+
+                    const fbApp = api.initializeApp(firebaseConfig);
+                    const fbAuth = api.getAuth(fbApp);
+                    cloudDb = api.getFirestore(fbApp);
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        const cred = await api.signInWithCustomToken(fbAuth, __initial_auth_token);
+                        cloudUser = cred.user;
+                    } else {
+                        const cred = await api.signInAnonymously(fbAuth);
+                        cloudUser = cred.user;
+                    }
+
+                    if (state.syncCode) {
+                        attachSyncListener(state.syncCode);
+                    }
+                } catch (err) {
+                    console.warn('Cloud sync initialization skipped/failed:', err);
+                    if (state.syncCode) {
+                        uiState.syncMode = 'local';
+                        updateSyncIndicator();
+                    }
+                }
+            }
+
+            function getWorkspaceDocRef(code) {
+                const api = window.__CLOUD_SYNC_API__;
+                if (!api || !cloudDb || !cloudUser || !code) return null;
+                const safeCode = encodeURIComponent(String(code).trim().toLowerCase());
+                return api.doc(cloudDb, 'artifacts', appId, 'public', 'data', `workspaces_${safeCode}`, 'snapshot');
+            }
+
+            function detachSyncListener() {
+                if (cloudWriteTimer) {
+                    clearTimeout(cloudWriteTimer);
+                    cloudWriteTimer = null;
+                }
+                if (typeof cloudUnsubscribe === 'function') {
+                    cloudUnsubscribe();
+                    cloudUnsubscribe = null;
+                }
+            }
+
+            // Listen to remote snapshot changes for automatic cross-device updates
+            function attachSyncListener(code) {
+                detachSyncListener();
+                const cleanCode = String(code || '').trim();
+                if (!cleanCode) {
+                    uiState.syncMode = 'local';
+                    updateSyncIndicator();
+                    return;
+                }
+
+                const api = window.__CLOUD_SYNC_API__;
+                const docRef = getWorkspaceDocRef(cleanCode);
+                if (!api || !docRef) {
+                    uiState.syncMode = 'local';
+                    updateSyncIndicator();
+                    return;
+                }
+
+                uiState.syncMode = 'connecting';
+                uiState.syncErrorMsg = '';
+                updateSyncIndicator();
+
+                cloudUnsubscribe = api.onSnapshot(
+                    docRef,
+                    async (snap) => {
+                        if (!snap.exists()) {
+                            // First device with this code seeds the cloud document
+                            await pushStateNowToCloud(cleanCode);
+                            uiState.syncMode = 'synced';
+                            updateSyncIndicator();
+                            return;
+                        }
+
+                        const remoteData = snap.data();
+                        if (!remoteData || !remoteData.payloadJson) return;
+
+                        try {
+                            const parsedRemote = JSON.parse(remoteData.payloadJson);
+                            const remoteRev = Number(parsedRemote.updatedRevision || remoteData.updatedRevision || 0) || 0;
+
+                            if (remoteRev > lastRemoteRevision) {
+                                isApplyingRemoteSnapshot = true;
+                                const preservedCode = state.syncCode || cleanCode;
+                                state = normalizeLoadedData(parsedRemote);
+                                state.syncCode = preservedCode;
+                                state.updatedRevision = remoteRev;
+                                lastRemoteRevision = remoteRev;
+                                saveState(true, false);
+                                renderAll();
+                                isApplyingRemoteSnapshot = false;
+                                showToast('Synced latest changes from another device.', 'success');
+                            }
+                            uiState.syncMode = 'synced';
+                            uiState.syncErrorMsg = '';
+                            updateSyncIndicator();
+                        } catch (parseErr) {
+                            console.warn('Failed to apply remote snapshot:', parseErr);
+                        }
+                    },
+                    (err) => {
+                        console.warn('Cloud snapshot listener error:', err);
+                        uiState.syncMode = 'error';
+                        uiState.syncErrorMsg = 'Offline or sync paused';
+                        updateSyncIndicator();
+                    }
+                );
+            }
+
+            function scheduleCloudPush() {
+                if (!state.syncCode) return;
+                if (cloudWriteTimer) clearTimeout(cloudWriteTimer);
+                cloudWriteTimer = setTimeout(() => {
+                    pushStateNowToCloud(state.syncCode);
+                }, 400);
+            }
+
+            async function pushStateNowToCloud(code) {
+                const api = window.__CLOUD_SYNC_API__;
+                const docRef = getWorkspaceDocRef(code);
+                if (!api || !docRef || !cloudUser) return;
+
+                try {
+                    const snapshotToSave = {
+                        ...state,
+                        syncCode: String(code || '').trim()
+                    };
+                    await api.setDoc(docRef, {
+                        syncCode: String(code || '').trim().toLowerCase(),
+                        updatedRevision: Number(snapshotToSave.updatedRevision || Date.now()),
+                        updatedAt: nowIso(),
+                        updatedBy: cloudUser.uid,
+                        payloadJson: JSON.stringify(snapshotToSave)
+                    });
+                    uiState.syncMode = 'synced';
+                    uiState.syncErrorMsg = '';
+                    updateSyncIndicator();
+                } catch (err) {
+                    console.warn('Cloud push error:', err);
+                    uiState.syncMode = 'error';
+                    uiState.syncErrorMsg = 'Sync queued locally';
+                    updateSyncIndicator();
+                }
+            }
+
+            function updateSyncIndicator() {
+                const pill = document.getElementById('sync-status-pill');
+                const dot = document.getElementById('sync-status-dot');
+                const label = document.getElementById('sync-status-label');
+                const ts = document.getElementById('last-saved-timestamp');
+                if (!pill || !dot || !label) return;
+
+                if (state.syncCode) {
+                    if (uiState.syncMode === 'synced') {
+                        pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
+                        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+                        label.textContent = `Auto-Sync: ${state.syncCode}`;
+                    } else if (uiState.syncMode === 'connecting') {
+                        pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200';
+                        dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500';
+                        label.textContent = `Connecting: ${state.syncCode}`;
+                    } else if (uiState.syncMode === 'error') {
+                        pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200';
+                        dot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+                        label.textContent = `${state.syncCode} (${uiState.syncErrorMsg || 'Local'})`;
+                    } else {
+                        pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200';
+                        dot.className = 'w-1.5 h-1.5 rounded-full bg-indigo-600';
+                        label.textContent = `Code: ${state.syncCode}`;
+                    }
+                } else {
+                    pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200';
+                    dot.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
+                    label.textContent = 'Local Saved';
+                }
+
+                if (ts && uiState.lastSavedAt) {
+                    ts.textContent = `Saved at ${uiState.lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+                }
+            }
+
+            function getProjectById(projectId) {
+                return state.projects.find((p) => p.id === projectId) || null;
+            }
+
+            function getPalette(project) {
+                const idx = typeof project?.paletteIndex === 'number'
+                    ? Math.abs(project.paletteIndex) % PASTEL_PALETTES.length
+                    : 0;
+                return PASTEL_PALETTES[idx];
+            }
+
+            function escapeHtml(str) {
+                return String(str || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function highlightText(text, query) {
+                const safe = escapeHtml(text);
+                const q = String(query || '').trim();
+                if (!q) return safe;
+                const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(${escapedQ})`, 'gi');
+                return safe.replace(regex, '<mark class="search-hit">$1</mark>');
+            }
+
+            // Update header badges & counts
+            function updateCountsAndHeader() {
+                const dateLabel = document.getElementById('header-date-label');
+                if (dateLabel) {
+                    dateLabel.textContent = new Date().toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                }
+
+                const activeProjectIds = new Set(state.projects.filter((p) => !p.archived).map((p) => p.id));
+                const activeTaskCount = state.tasks.filter((t) => !t.completed && activeProjectIds.has(t.projectId)).length;
+                const completedTaskCount = state.tasks.filter((t) => t.completed).length;
+                const archivedProjectCount = state.projects.filter((p) => p.archived).length;
+
+                const elActive = document.getElementById('count-active-tasks');
+                const elComp = document.getElementById('count-completed-tasks');
+                const elArch = document.getElementById('count-archived-projects');
+                const elFol = document.getElementById('following-count-badge');
+
+                if (elActive) elActive.textContent = String(activeTaskCount);
+                if (elComp) elComp.textContent = String(completedTaskCount);
+                if (elArch) elArch.textContent = String(archivedProjectCount);
+                if (elFol) elFol.textContent = String(state.following.length);
+
+                // Populate project code suggestions for Following
+                const datalist = document.getElementById('project-code-suggestions');
+                if (datalist) {
+                    datalist.innerHTML = state.projects
+                        .filter((p) => p.code)
+                        .map((p) => `<option value="${escapeHtml(p.code)}">${escapeHtml(p.name)}</option>`)
+                        .join('');
+                }
+
+                updateSyncIndicator();
+            }
+
+            // Render Left Column: Active Projects, Completed (grouped by project with accordion), or Archived Projects
+            function renderProjectsAndTasks() {
+                const container = document.getElementById('tasks-view-container');
+                const addProjForm = document.getElementById('add-project-form');
+                if (!container) return;
+
+                // Update tab active styles
+                document.querySelectorAll('.task-tab-btn').forEach((btn) => {
+                    const isCurrent = btn.dataset.taskTab === uiState.taskTab;
+                    btn.className = isCurrent
+                        ? 'task-tab-btn px-2.5 py-1 rounded-lg bg-white text-slate-900 shadow-2xs transition cursor-pointer'
+                        : 'task-tab-btn px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer';
+                });
+
+                if (addProjForm) {
+                    addProjForm.classList.toggle('hidden', uiState.taskTab !== 'active');
+                }
+
+                if (uiState.taskTab === 'active') {
+                    renderActiveProjectsView(container);
+                } else if (uiState.taskTab === 'completed') {
+                    renderCompletedGroupedView(container);
+                } else {
+                    renderArchivedProjectsView(container);
+                }
+
+                updateCountsAndHeader();
+                refreshIcons();
+            }
+
+            function renderActiveProjectsView(container) {
+                const activeProjects = state.projects.filter((p) => !p.archived);
+                if (activeProjects.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-10 px-4 border border-dashed border-slate-200 rounded-2xl text-slate-500 text-xs">
+                            No active projects yet. Create one above to start adding tasks.
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = activeProjects
+                    .map((proj) => {
+                        const palette = getPalette(proj);
+                        const projTasks = state.tasks.filter((t) => t.projectId === proj.id && !t.completed);
+                        const doneCount = state.tasks.filter((t) => t.projectId === proj.id && t.completed).length;
+                        const totalCount = projTasks.length + doneCount;
+
+                        const tasksHtml = proj.collapsed
+                            ? ''
+                            : `
+                            <div class="p-2 space-y-1 bg-white">
+                                ${
+                                    projTasks.length === 0
+                                        ? `<p class="text-[11px] text-slate-400 px-2 py-1.5 italic">No open tasks in this project.</p>`
+                                        : projTasks.map((task) => renderTaskRow(task)).join('')
+                                }
+                                <!-- Compact Inline Add Task Form -->
+                                <form data-add-task-project="${escapeHtml(proj.id)}" class="add-task-inline-form pt-1.5 mt-1 border-t border-slate-100 flex items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        title="Mark importance star on new task"
+                                        class="new-task-star-btn p-1 rounded-lg text-slate-400 hover:text-amber-500 transition cursor-pointer"
+                                        data-starred="0"
+                                    >
+                                        <i data-lucide="star" class="w-4 h-4"></i>
+                                    </button>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="Add a task..."
+                                        class="new-task-title-input flex-1 min-w-[120px] px-2 py-1 text-xs bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-lg outline-none"
+                                    >
+                                    <input
+                                        type="date"
+                                        title="Due date (optional)"
+                                        class="new-task-date-input px-1.5 py-1 text-[11px] bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-lg outline-none text-slate-600"
+                                    >
+                                    <button
+                                        type="submit"
+                                        class="px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition shrink-0 cursor-pointer"
+                                    >
+                                        Add
+                                    </button>
+                                </form>
+                            </div>
+                        `;
+
+                        return `
+                            <div class="border border-slate-200 rounded-xl overflow-hidden shadow-2xs" data-project-card="${escapeHtml(proj.id)}">
+                                <!-- Soft Pastel Project Header -->
+                                <div
+                                    style="background-color: ${palette.headerBg}; border-bottom: 1px solid ${palette.headerBorder};"
+                                    class="px-3 py-1.5 flex items-center justify-between gap-2"
+                                >
+                                    <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                        <button
+                                            type="button"
+                                            data-toggle-collapse="${escapeHtml(proj.id)}"
+                                            title="${proj.collapsed ? 'Expand project' : 'Collapse project'}"
+                                            class="p-0.5 text-slate-600 hover:text-slate-900 rounded cursor-pointer"
+                                        >
+                                            <i data-lucide="${proj.collapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
+                                        </button>
+                                        <span
+                                            data-edit-project-code="${escapeHtml(proj.id)}"
+                                            title="Click to edit project code"
+                                            style="background-color: ${palette.badgeBg}; color: ${palette.badgeText};"
+                                            class="px-1.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wide cursor-pointer shrink-0"
+                                        >${proj.code ? escapeHtml(proj.code) : '+CODE'}</span>
+                                        <h3
+                                            data-edit-project-name="${escapeHtml(proj.id)}"
+                                            title="Click to rename project"
+                                            class="text-xs sm:text-sm font-bold text-slate-800 truncate cursor-pointer"
+                                        >${highlightText(proj.name, uiState.searchQuery)}</h3>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 shrink-0">
+                                        <span class="text-[11px] font-semibold text-slate-600">${doneCount}/${totalCount}</span>
+                                        <button
+                                            type="button"
+                                            data-archive-project="${escapeHtml(proj.id)}"
+                                            title="Archive project"
+                                            class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-white/80 hover:bg-white text-slate-700 border border-slate-300/70 rounded-md transition cursor-pointer"
+                                        >
+                                            <i data-lucide="archive" class="w-3 h-3"></i>
+                                            <span class="hidden sm:inline">Archive</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                ${tasksHtml}
+                            </div>
+                        `;
+                    })
+                    .join('');
+            }
+
+            function renderTaskRow(task) {
+                const overdue = isOverdue(task.dueDate, task.completed);
+                const isNotesOpen = uiState.openTaskNoteId === task.id;
+                const isEditingTitle = uiState.editingTaskId === task.id;
+                const bulletCount = Array.isArray(task.bullets) ? task.bullets.length : 0;
+
+                const titleClass = overdue
+                    ? 'text-xs sm:text-[13px] font-bold text-rose-600 leading-snug'
+                    : task.completed
+                    ? 'text-xs sm:text-[13px] line-through text-slate-400 leading-snug'
+                    : 'text-xs sm:text-[13px] font-medium text-slate-800 leading-snug';
+
+                const bulletsHtml = (task.bullets || [])
+                    .map(
+                        (b) => `
+                        <div class="flex items-center justify-between gap-2 py-0.5 px-1.5 rounded-md hover:bg-slate-100/80 text-xs">
+                            <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0"></span>
+                                <input
+                                    type="checkbox"
+                                    data-bullet-toggle="${escapeHtml(task.id)}:${escapeHtml(b.id)}"
+                                    ${b.done ? 'checked' : ''}
+                                    class="rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                                >
+                                <span class="${b.done ? 'line-through text-slate-400' : 'text-slate-700'} break-words">${highlightText(b.text, uiState.searchQuery)}</span>
+                            </div>
+                            <button
+                                type="button"
+                                data-bullet-delete="${escapeHtml(task.id)}:${escapeHtml(b.id)}"
+                                title="Remove bullet"
+                                class="p-0.5 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                            >
+                                <i data-lucide="x" class="w-3 h-3"></i>
+                            </button>
+                        </div>
+                    `
+                    )
+                    .join('');
+
+                return `
+                    <div
+                        data-task-id="${escapeHtml(task.id)}"
+                        draggable="true"
+                        class="task-item-wrapper rounded-lg border border-transparent hover:border-slate-200 transition ${
+                            overdue ? 'bg-rose-50/40' : 'hover:bg-slate-50/80'
+                        }"
+                    >
+                        <!-- Compact Task Row (Double-click row to toggle bullet notes) -->
+                        <div
+                            data-task-row="${escapeHtml(task.id)}"
+                            class="px-2 py-1 flex items-center justify-between gap-2 select-none"
+                        >
+                            <div class="flex items-center gap-2 min-w-0 flex-1">
+                                <!-- Drag Handle -->
+                                <span
+                                    title="Drag to Following"
+                                    class="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing shrink-0"
+                                >
+                                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                                </span>
+
+                                <!-- Completion Checkbox -->
+                                <input
+                                    type="checkbox"
+                                    data-task-complete="${escapeHtml(task.id)}"
+                                    ${task.completed ? 'checked' : ''}
+                                    class="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer shrink-0"
+                                >
+
+                                <!-- Star Importance Toggle (~50% larger visual presence) -->
+                                <button
+                                    type="button"
+                                    data-task-star="${escapeHtml(task.id)}"
+                                    title="${task.starred ? 'Important (click to unstar)' : 'Mark important'}"
+                                    class="p-0.5 rounded transition cursor-pointer shrink-0 ${
+                                        task.starred ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'
+                                    }"
+                                >
+                                    <svg
+                                        width="21"
+                                        height="21"
+                                        viewBox="0 0 24 24"
+                                        fill="${task.starred ? 'currentColor' : 'none'}"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                    </svg>
+                                </button>
+
+                                <!-- Task Title (Single-click edits inline, Double-click row opens bullet notes) -->
+                                ${
+                                    isEditingTitle
+                                        ? `<input
+                                            type="text"
+                                            data-task-edit-input="${escapeHtml(task.id)}"
+                                            value="${escapeHtml(task.title)}"
+                                            class="flex-1 min-w-[120px] px-1.5 py-0.5 text-xs bg-white border border-indigo-400 rounded outline-none"
+                                        >`
+                                        : `<span
+                                            data-task-title-edit="${escapeHtml(task.id)}"
+                                            title="Click to edit title • Double-click row for bullet notes"
+                                            class="${titleClass} truncate cursor-text"
+                                        >${highlightText(task.title, uiState.searchQuery)}</span>`
+                                }
+
+                                ${
+                                    overdue
+                                        ? `<span class="px-1.5 py-0.2 text-[10px] font-bold uppercase bg-rose-100 text-rose-700 rounded shrink-0">Overdue</span>`
+                                        : ''
+                                }
+                            </div>
+
+                            <!-- Right Controls: Editable Due Date, Bullet Indicator, Follow Button -->
+                            <div class="flex items-center gap-1 shrink-0">
+                                ${
+                                    bulletCount > 0
+                                        ? `<button
+                                            type="button"
+                                            data-task-bullet-toggle="${escapeHtml(task.id)}"
+                                            title="Open bullet notes (${bulletCount})"
+                                            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 rounded cursor-pointer"
+                                        >
+                                            <i data-lucide="list-bullets" class="w-3 h-3"></i>
+                                            <span>${bulletCount}</span>
+                                        </button>`
+                                        : ''
+                                }
+
+                                <input
+                                    type="date"
+                                    data-task-due-input="${escapeHtml(task.id)}"
+                                    value="${escapeHtml(task.dueDate || '')}"
+                                    title="Set or change due date"
+                                    class="px-1 py-0.5 text-[10px] rounded border ${
+                                        overdue
+                                            ? 'border-rose-300 bg-rose-50 text-rose-700 font-bold'
+                                            : task.dueDate
+                                            ? 'border-slate-200 bg-slate-50 text-slate-600'
+                                            : 'border-transparent bg-transparent hover:border-slate-200 text-slate-400'
+                                    } outline-none cursor-pointer"
+                                >
+
+                                <button
+                                    type="button"
+                                    data-task-follow="${escapeHtml(task.id)}"
+                                    title="Add to Following"
+                                    class="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition cursor-pointer"
+                                >
+                                    <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Double-Click Expanded Bullet Notes Dropdown -->
+                        ${
+                            isNotesOpen
+                                ? `
+                                <div
+                                    data-task-notes-panel="${escapeHtml(task.id)}"
+                                    class="mx-2 mb-2 mt-0.5 p-2 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5"
+                                >
+                                    <div class="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                        <span>Task Bullet Notes (Click outside to close)</span>
+                                        <button
+                                            type="button"
+                                            data-task-delete="${escapeHtml(task.id)}"
+                                            class="text-rose-600 hover:underline font-medium normal-case cursor-pointer"
+                                        >
+                                            Delete task
+                                        </button>
+                                    </div>
+                                    <div class="space-y-0.5">${bulletsHtml || `<p class="text-[11px] text-slate-400 italic">No bullets yet.</p>`}</div>
+                                    <form data-add-bullet-form="${escapeHtml(task.id)}" class="flex items-center gap-1.5 pt-1">
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="Add bullet point..."
+                                            class="flex-1 px-2 py-1 text-xs bg-white border border-slate-200 focus:border-indigo-500 rounded-md outline-none"
+                                        >
+                                        <button
+                                            type="submit"
+                                            class="px-2 py-1 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md cursor-pointer"
+                                        >
+                                            + Bullet
+                                        </button>
+                                    </form>
+                                </div>
+                            `
+                                : ''
+                        }
+                    </div>
+                `;
+            }
+
+            // Completed Tasks grouped by Project with collapsible accordions
+            function renderCompletedGroupedView(container) {
+                const completedTasks = state.tasks.filter((t) => t.completed);
+                if (completedTasks.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-10 px-4 border border-dashed border-slate-200 rounded-2xl text-slate-500 text-xs">
+                            No completed tasks yet. Checked tasks will appear here grouped by project.
+                        </div>
+                    `;
+                    return;
+                }
+
+                const groupedIds = [...new Set(completedTasks.map((t) => t.projectId))];
+                container.innerHTML = groupedIds
+                    .map((pid) => {
+                        const proj = getProjectById(pid) || { name: 'Archived / Removed Project', code: '', paletteIndex: 0 };
+                        const palette = getPalette(proj);
+                        const items = completedTasks.filter((t) => t.projectId === pid);
+                        const isClosed = Boolean(uiState.collapsedCompletedProjects[pid]);
+
+                        return `
+                            <div class="border border-slate-200 rounded-xl overflow-hidden">
+                                <button
+                                    type="button"
+                                    data-accordion-completed="${escapeHtml(pid)}"
+                                    style="background-color: ${palette.headerBg}; border-bottom: ${isClosed ? 'none' : `1px solid ${palette.headerBorder}`};"
+                                    class="w-full px-3 py-1.5 flex items-center justify-between gap-2 text-left cursor-pointer"
+                                >
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <i data-lucide="${isClosed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4 text-slate-600 shrink-0"></i>
+                                        ${
+                                            proj.code
+                                                ? `<span class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-white/80 text-slate-700 uppercase">${escapeHtml(proj.code)}</span>`
+                                                : ''
+                                        }
+                                        <span class="text-xs sm:text-sm font-bold text-slate-800 truncate">${escapeHtml(proj.name)}</span>
+                                    </div>
+                                    <span class="text-[11px] font-semibold text-slate-600 shrink-0">${items.length} completed</span>
+                                </button>
+                                ${
+                                    isClosed
+                                        ? ''
+                                        : `<div class="p-2 bg-white space-y-1">${items.map((t) => renderTaskRow(t)).join('')}</div>`
+                                }
+                            </div>
+                        `;
+                    })
+                    .join('');
+            }
+
+            // Archived Projects View
+            function renderArchivedProjectsView(container) {
+                const archived = state.projects.filter((p) => p.archived);
+                if (archived.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-10 px-4 border border-dashed border-slate-200 rounded-2xl text-slate-500 text-xs">
+                            No archived projects. Finished projects can be archived from the Active tab.
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = archived
+                    .map((proj) => {
+                        const palette = getPalette(proj);
+                        const taskTotal = state.tasks.filter((t) => t.projectId === proj.id).length;
+                        return `
+                            <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                                <div
+                                    style="background-color: ${palette.headerBg};"
+                                    class="px-3 py-2 flex items-center justify-between gap-2"
+                                >
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        ${
+                                            proj.code
+                                                ? `<span class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-white/80 text-slate-700 uppercase">${escapeHtml(proj.code)}</span>`
+                                                : ''
+                                        }
+                                        <span class="text-xs sm:text-sm font-bold text-slate-800 truncate">${highlightText(proj.name, uiState.searchQuery)}</span>
+                                        <span class="text-[11px] text-slate-500">(${taskTotal} tasks)</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        data-restore-project="${escapeHtml(proj.id)}"
+                                        class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg transition cursor-pointer"
+                                    >
+                                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                                        <span>Restore</span>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    })
+                    .join('');
+            }
+
+            // Render Project Notes (Vertical Active Projects + Vertical Note Pages + Editor)
+            function renderProjectNotes() {
+                const activeProjects = state.projects.filter((p) => !p.archived);
+                const projSidebar = document.getElementById('notes-projects-sidebar');
+                const pagesSidebar = document.getElementById('notes-pages-sidebar');
+                const targetSelect = document.getElementById('note-target-project-select');
+                const titleInput = document.getElementById('note-page-title-input');
+                const contentTextarea = document.getElementById('note-content-textarea');
+                const metaLabel = document.getElementById('note-page-meta');
+                const badge = document.getElementById('active-note-project-badge');
+                const editorContainer = document.getElementById('note-editor-container');
+                const expandBtn = document.getElementById('toggle-expand-editor-btn');
+
+                if (!projSidebar || !pagesSidebar || !titleInput || !contentTextarea) return;
+
+                if (activeProjects.length > 0 && !activeProjects.some((p) => p.id === state.selectedProjectId)) {
+                    state.selectedProjectId = activeProjects[0].id;
+                }
+
+                const currentProject = getProjectById(state.selectedProjectId);
+                if (badge) {
+                    if (currentProject) {
+                        badge.classList.remove('hidden');
+                        badge.textContent = currentProject.code ? `[${currentProject.code}] ${currentProject.name}` : currentProject.name;
+                    } else {
+                        badge.classList.add('hidden');
+                    }
+                }
+
+                // Populate "Line to Task" target project dropdown
+                if (targetSelect) {
+                    targetSelect.innerHTML = activeProjects
+                        .map(
+                            (p) =>
+                                `<option value="${escapeHtml(p.id)}" ${p.id === state.selectedProjectId ? 'selected' : ''}>${
+                                    p.code ? `[${escapeHtml(p.code)}] ` : ''
+                                }${escapeHtml(p.name)}</option>`
+                        )
+                        .join('');
+                }
+
+                // Render vertical Active Projects list
+                projSidebar.innerHTML = activeProjects
+                    .map((p) => {
+                        const selected = p.id === state.selectedProjectId;
+                        const palette = getPalette(p);
+                        const pageCount = state.notePages.filter((n) => n.projectId === p.id).length;
+                        return `
+                            <button
+                                type="button"
+                                data-select-note-project="${escapeHtml(p.id)}"
+                                style="${selected ? `background-color: ${palette.headerBg}; border-color: ${palette.headerBorder};` : ''}"
+                                class="w-full text-left px-2 py-1.5 rounded-lg border ${
+                                    selected
+                                        ? 'font-semibold text-slate-900 shadow-2xs'
+                                        : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                } text-xs flex items-center justify-between gap-1 transition cursor-pointer"
+                            >
+                                <span class="truncate">${p.code ? `<strong class="text-[10px]">${escapeHtml(p.code)}</strong> ` : ''}${escapeHtml(p.name)}</span>
+                                <span class="text-[10px] text-slate-400 shrink-0">${pageCount}</span>
+                            </button>
+                        `;
+                    })
+                    .join('');
+
+                // Render vertical Note Pages for selected project
+                const projectNotes = state.notePages.filter((n) => n.projectId === state.selectedProjectId);
+                if (projectNotes.length > 0 && !projectNotes.some((n) => n.id === state.selectedNoteId)) {
+                    state.selectedNoteId = projectNotes[0].id;
+                }
+
+                pagesSidebar.innerHTML =
+                    projectNotes.length === 0
+                        ? `<p class="text-[11px] text-slate-400 p-2 italic">No pages for this project yet. Click + New.</p>`
+                        : projectNotes
+                            .map((n) => {
+                                const active = n.id === state.selectedNoteId;
+                                const tplBadge =
+                                    n.template === 'meeting' ? 'Meeting' : n.template === 'decision' ? 'Actions' : 'Note';
+                                return `
+                                    <button
+                                        type="button"
+                                        data-select-note-page="${escapeHtml(n.id)}"
+                                        class="w-full text-left px-2 py-1.5 rounded-lg border transition cursor-pointer ${
+                                            active
+                                                ? 'bg-indigo-50/80 border-indigo-200 text-indigo-950'
+                                                : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
+                                        }"
+                                    >
+                                        <div class="text-xs font-semibold truncate">${escapeHtml(n.title || 'Untitled Note')}</div>
+                                        <div class="text-[10px] text-slate-400 flex items-center justify-between mt-0.5">
+                                            <span>${tplBadge}</span>
+                                        </div>
+                                    </button>
+                                `;
+                            })
+                            .join('');
+
+                // Load active note into editor
+                const activeNote = projectNotes.find((n) => n.id === state.selectedNoteId) || null;
+                if (activeNote) {
+                    titleInput.disabled = false;
+                    contentTextarea.disabled = false;
+                    if (document.activeElement !== titleInput) {
+                        titleInput.value = activeNote.title;
+                    }
+                    if (document.activeElement !== contentTextarea) {
+                        contentTextarea.value = activeNote.content;
+                    }
+                    if (metaLabel) {
+                        const dt = activeNote.updatedAt ? new Date(activeNote.updatedAt) : new Date();
+                        metaLabel.textContent = `Updated ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                    }
+                } else {
+                    titleInput.disabled = true;
+                    contentTextarea.disabled = true;
+                    titleInput.value = '';
+                    contentTextarea.value = '';
+                    if (metaLabel) metaLabel.textContent = 'No note selected';
+                }
+
+                // Handle expanded editor mode
+                const exitExpandBtn = document.getElementById('exit-expanded-editor-btn');
+                if (editorContainer && expandBtn) {
+                    if (uiState.expandedEditor) {
+                        editorContainer.className =
+                            'fixed inset-4 z-50 bg-white border-2 border-indigo-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden';
+                        expandBtn.classList.add('hidden');
+                        if (exitExpandBtn) {
+                            exitExpandBtn.classList.remove('hidden');
+                            exitExpandBtn.classList.add('inline-flex');
+                        }
+                    } else {
+                        editorContainer.className = 'sm:col-span-6 flex flex-col bg-white overflow-hidden';
+                        expandBtn.classList.remove('hidden');
+                        expandBtn.innerHTML = `<i data-lucide="maximize-2" class="w-3.5 h-3.5"></i><span>Expand Editor</span>`;
+                        if (exitExpandBtn) {
+                            exitExpandBtn.classList.add('hidden');
+                            exitExpandBtn.classList.remove('inline-flex');
+                        }
+                    }
+                }
+
+                refreshIcons();
+            }
+
+            // Format active note cleanly for email pasting
+            function formatNoteForEmail(note, project) {
+                const projPrefix = project
+                    ? `${project.code ? `[${project.code}] ` : ''}${project.name}`
+                    : 'Project Notes';
+                const lines = [
+                    `Subject / Topic: ${note.title || 'Untitled Note'} (${projPrefix})`,
+                    `Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`,
+                    '----------------------------------------',
+                    (note.content || '').trim() || '(No details recorded)'
+                ];
+                return lines.join('\n');
+            }
+
+            function copyTextToClipboard(text, successMsg = 'Copied to clipboard.') {
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    navigator.clipboard
+                        .writeText(text)
+                        .then(() => showToast(successMsg, 'success'))
+                        .catch(() => fallbackCopy(text, successMsg));
+                } else {
+                    fallbackCopy(text, successMsg);
+                }
+            }
+
+            function fallbackCopy(text, successMsg) {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    showToast(successMsg, 'success');
+                } catch {
+                    showToast('Unable to copy automatically.', 'error');
+                }
+                ta.remove();
+            }
+
+            // Render Following Section
+            function renderFollowing() {
+                const container = document.getElementById('following-list-container');
+                if (!container) return;
+
+                if (state.following.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-6 px-3 border border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">
+                            No items in Following yet. Drag a task here, click its eye icon, or enter a Project Code + item above.
+                        </div>
+                    `;
+                    updateCountsAndHeader();
+                    refreshIcons();
+                    return;
+                }
+
+                container.innerHTML = state.following
+                    .map((item) => {
+                        const overdue = isOverdue(item.dueDate, item.done);
+                        return `
+                            <div
+                                data-following-id="${escapeHtml(item.id)}"
+                                class="px-2.5 py-1.5 rounded-xl border ${
+                                    overdue ? 'border-rose-200 bg-rose-50/50' : 'border-slate-200/80 bg-slate-50/40 hover:bg-slate-50'
+                                } flex items-center justify-between gap-2 text-xs"
+                            >
+                                <div class="flex items-center gap-2 min-w-0 flex-1">
+                                    <input
+                                        type="checkbox"
+                                        data-following-toggle="${escapeHtml(item.id)}"
+                                        ${item.done ? 'checked' : ''}
+                                        class="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer shrink-0"
+                                    >
+                                    <span
+                                        data-following-code-edit="${escapeHtml(item.id)}"
+                                        title="Click to edit project code"
+                                        class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-200/80 text-slate-700 uppercase shrink-0 cursor-pointer"
+                                    >${item.projectCode ? escapeHtml(item.projectCode) : 'NO-CODE'}</span>
+                                    <span class="${
+                                        item.done
+                                            ? 'line-through text-slate-400'
+                                            : overdue
+                                            ? 'font-bold text-rose-700'
+                                            : 'font-medium text-slate-800'
+                                    } truncate">${highlightText(item.title, uiState.searchQuery)}</span>
+                                    ${
+                                        item.owner
+                                            ? `<span class="hidden sm:inline-block px-1.5 py-0.5 text-[10px] bg-white border border-slate-200 rounded text-slate-600 truncate max-w-[100px]">@${escapeHtml(item.owner)}</span>`
+                                            : ''
+                                    }
+                                </div>
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                        type="button"
+                                        data-following-to-task="${escapeHtml(item.id)}"
+                                        title="Move item back to Tasks"
+                                        class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 border border-slate-200 rounded transition cursor-pointer"
+                                    >
+                                        <i data-lucide="arrow-up-left" class="w-3 h-3"></i>
+                                        <span>To Task</span>
+                                    </button>
+                                    <input
+                                        type="date"
+                                        data-following-due-input="${escapeHtml(item.id)}"
+                                        value="${escapeHtml(item.dueDate || '')}"
+                                        title="Set or change target date"
+                                        class="px-1 py-0.5 text-[10px] rounded border ${
+                                            overdue
+                                                ? 'border-rose-300 bg-rose-50 text-rose-700 font-bold'
+                                                : item.dueDate
+                                                ? 'border-slate-200 bg-slate-50 text-slate-600'
+                                                : 'border-transparent bg-transparent hover:border-slate-200 text-slate-400'
+                                        } outline-none cursor-pointer"
+                                    >
+                                    <button
+                                        type="button"
+                                        data-following-delete="${escapeHtml(item.id)}"
+                                        title="Remove from Following"
+                                        class="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                                    >
+                                        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    })
+                    .join('');
+
+                updateCountsAndHeader();
+                refreshIcons();
+            }
+
+            // Global Search across Active Tasks, Completed Tasks, Task Bullets, Projects, Note Pages, and Following
+            function runGlobalSearch(query) {
+                uiState.searchQuery = query;
+                const panel = document.getElementById('search-results-panel');
+                const list = document.getElementById('search-results-list');
+                const summary = document.getElementById('search-results-summary');
+                const clearBtn = document.getElementById('clear-search-btn');
+
+                const q = query.trim().toLowerCase();
+                if (clearBtn) clearBtn.classList.toggle('hidden', !q);
+
+                // Re-render views so inline <mark> highlights stay in sync
+                renderProjectsAndTasks();
+                renderFollowing();
+
+                if (!q) {
+                    if (panel) panel.classList.add('hidden');
+                    return;
+                }
+
+                const matches = [];
+
+                state.projects.forEach((p) => {
+                    if (p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q)) {
+                        matches.push({
+                            kind: p.archived ? 'Archived Project' : 'Project',
+                            title: `${p.code ? `[${p.code}] ` : ''}${p.name}`,
+                            sub: p.archived ? 'Archived tab' : 'Active project',
+                            action: () => {
+                                uiState.taskTab = p.archived ? 'archived' : 'active';
+                                renderProjectsAndTasks();
+                            }
+                        });
+                    }
+                });
+
+                state.tasks.forEach((t) => {
+                    const proj = getProjectById(t.projectId);
+                    const bulletHit = (t.bullets || []).find((b) => b.text.toLowerCase().includes(q));
+                    if (t.title.toLowerCase().includes(q) || bulletHit) {
+                        matches.push({
+                            kind: t.completed ? 'Completed Task' : 'Task',
+                            title: t.title,
+                            sub: bulletHit ? `Bullet: ${bulletHit.text}` : proj ? proj.name : 'Task',
+                            action: () => {
+                                uiState.taskTab = t.completed ? 'completed' : 'active';
+                                if (!t.completed) {
+                                    uiState.openTaskNoteId = t.id;
+                                }
+                                renderProjectsAndTasks();
+                            }
+                        });
+                    }
+                });
+
+                state.notePages.forEach((n) => {
+                    if (n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q)) {
+                        const proj = getProjectById(n.projectId);
+                        matches.push({
+                            kind: 'Project Note',
+                            title: n.title || 'Untitled Note',
+                            sub: proj ? proj.name : 'Note',
+                            action: () => {
+                                state.selectedProjectId = n.projectId;
+                                state.selectedNoteId = n.id;
+                                saveState();
+                                renderProjectNotes();
+                            }
+                        });
+                    }
+                });
+
+                state.following.forEach((f) => {
+                    if (
+                        f.title.toLowerCase().includes(q) ||
+                        (f.projectCode || '').toLowerCase().includes(q) ||
+                        (f.owner || '').toLowerCase().includes(q)
+                    ) {
+                        matches.push({
+                            kind: 'Following',
+                            title: f.title,
+                            sub: `${f.projectCode || 'No code'}${f.owner ? ` • @${f.owner}` : ''}`,
+                            action: () => {
+                                document.getElementById('following-section')?.scrollIntoView({ behavior: 'smooth' });
+                            }
+                        });
+                    }
+                });
+
+                if (panel && list && summary) {
+                    panel.classList.remove('hidden');
+                    summary.textContent = `${matches.length} result${matches.length === 1 ? '' : 's'} for "${query.trim()}"`;
+                    if (matches.length === 0) {
+                        list.innerHTML = `<p class="text-slate-400 py-2">No matching items found.</p>`;
+                    } else {
+                        list.innerHTML = matches
+                            .slice(0, 25)
+                            .map(
+                                (m, idx) => `
+                                <button
+                                    type="button"
+                                    data-search-result-idx="${idx}"
+                                    class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-slate-100 flex items-center justify-between gap-2 transition cursor-pointer"
+                                >
+                                    <div class="min-w-0">
+                                        <span class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-indigo-50 text-indigo-700 mr-1.5">${escapeHtml(m.kind)}</span>
+                                        <span class="font-semibold text-slate-800">${highlightText(m.title, query)}</span>
+                                        <span class="text-slate-400 ml-1.5 text-[11px]">${escapeHtml(m.sub)}</span>
+                                    </div>
+                                    <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+                                </button>
+                            `
+                            )
+                            .join('');
+
+                        list.querySelectorAll('[data-search-result-idx]').forEach((btn) => {
+                            btn.addEventListener('click', () => {
+                                const idx = Number(btn.dataset.searchResultIdx);
+                                if (matches[idx] && typeof matches[idx].action === 'function') {
+                                    matches[idx].action();
+                                }
+                            });
+                        });
+                        refreshIcons();
+                    }
+                }
+            }
+
+            // Follow a task (from eye icon or drag-and-drop)
+            function followTask(taskId) {
+                const task = state.tasks.find((t) => t.id === taskId);
+                if (!task) return;
+                const proj = getProjectById(task.projectId);
+                const exists = state.following.some((f) => f.sourceTaskId === task.id && !f.done);
+                if (exists) {
+                    showToast('Task is already in Following.');
+                    return;
+                }
+                state.following.unshift({
+                    id: uid('fol'),
+                    projectCode: (proj?.code || '').toUpperCase(),
+                    title: task.title,
+                    owner: '',
+                    dueDate: task.dueDate || '',
+                    done: false,
+                    notes: '',
+                    sourceTaskId: task.id,
+                    createdAt: nowIso()
+                });
+                saveState();
+                renderFollowing();
+                showToast('Added task to Following.', 'success');
+            }
+
+            // Move a Following item back into an active project's task list
+            function moveFollowingToTask(followingId) {
+                const idx = state.following.findIndex((f) => f.id === followingId);
+                if (idx === -1) return;
+                const item = state.following[idx];
+
+                const activeProjects = state.projects.filter((p) => !p.archived);
+                const matchedByCode = item.projectCode
+                    ? activeProjects.find((p) => (p.code || '').toUpperCase() === item.projectCode.toUpperCase())
+                    : null;
+                const targetProject = matchedByCode || getProjectById(state.selectedProjectId) || activeProjects[0];
+
+                if (!targetProject) {
+                    showToast('Create or restore an active project first.', 'error');
+                    return;
+                }
+
+                state.tasks.push({
+                    id: uid('task'),
+                    projectId: targetProject.id,
+                    title: item.title,
+                    dueDate: item.dueDate || '',
+                    starred: false,
+                    completed: false,
+                    completedAt: null,
+                    bullets: item.owner ? [{ id: uid('bul'), text: `Owner: ${item.owner}`, done: false }] : [],
+                    createdAt: nowIso()
+                });
+
+                state.following.splice(idx, 1);
+                uiState.taskTab = 'active';
+                saveState();
+                renderProjectsAndTasks();
+                renderFollowing();
+                showToast(`Moved "${item.title}" to ${targetProject.name} tasks.`, 'success');
+            }
+
+            // Wire up all DOM event listeners
+            function bindEvents() {
+                // Task sub-tabs
+                document.querySelectorAll('.task-tab-btn').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        uiState.taskTab = btn.dataset.taskTab;
+                        uiState.openTaskNoteId = null;
+                        uiState.editingTaskId = null;
+                        renderProjectsAndTasks();
+                    });
+                });
+
+                // Add project form
+                const addProjForm = document.getElementById('add-project-form');
+                if (addProjForm) {
+                    addProjForm.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const codeEl = document.getElementById('new-project-code');
+                        const nameEl = document.getElementById('new-project-name');
+                        const name = (nameEl?.value || '').trim();
+                        if (!name) return;
+                        const code = (codeEl?.value || '').trim().toUpperCase();
+                        const usedPalettes = state.projects.length;
+                        const newProj = {
+                            id: uid('proj'),
+                            code,
+                            name,
+                            paletteIndex: usedPalettes % PASTEL_PALETTES.length,
+                            collapsed: false,
+                            archived: false,
+                            createdAt: nowIso()
+                        };
+                        state.projects.push(newProj);
+                        state.selectedProjectId = newProj.id;
+
+                        // Ensure at least one note page exists for the new project
+                        const newNote = {
+                            id: uid('note'),
+                            projectId: newProj.id,
+                            template: 'blank',
+                            title: `${name} Notes`,
+                            content: '',
+                            updatedAt: nowIso()
+                        };
+                        state.notePages.push(newNote);
+                        state.selectedNoteId = newNote.id;
+
+                        if (codeEl) codeEl.value = '';
+                        if (nameEl) nameEl.value = '';
+                        saveState();
+                        renderProjectsAndTasks();
+                        renderProjectNotes();
+                        showToast(`Project "${name}" created.`, 'success');
+                    });
+                }
+
+                // Delegated clicks inside Projects & Tasks
+                const tasksContainer = document.getElementById('tasks-view-container');
+                if (tasksContainer) {
+                    tasksContainer.addEventListener('click', (e) => {
+                        // Toggle new task star before submit
+                        const newStarBtn = e.target.closest('.new-task-star-btn');
+                        if (newStarBtn) {
+                            const current = newStarBtn.dataset.starred === '1';
+                            newStarBtn.dataset.starred = current ? '0' : '1';
+                            newStarBtn.classList.toggle('text-amber-500', !current);
+                            newStarBtn.classList.toggle('text-slate-400', current);
+                            return;
+                        }
+
+                        // Collapse / expand project block
+                        const collapseBtn = e.target.closest('[data-toggle-collapse]');
+                        if (collapseBtn) {
+                            const proj = getProjectById(collapseBtn.dataset.toggleCollapse);
+                            if (proj) {
+                                proj.collapsed = !proj.collapsed;
+                                saveState();
+                                renderProjectsAndTasks();
+                            }
+                            return;
+                        }
+
+                        // Edit project code
+                        const codeBadge = e.target.closest('[data-edit-project-code]');
+                        if (codeBadge) {
+                            const proj = getProjectById(codeBadge.dataset.editProjectCode);
+                            if (proj) {
+                                const nextCode = window.prompt ? prompt('Project code:', proj.code || '') : null;
+                                if (nextCode !== null) {
+                                    proj.code = nextCode.trim().toUpperCase();
+                                    saveState();
+                                    renderProjectsAndTasks();
+                                    renderProjectNotes();
+                                }
+                            }
+                            return;
+                        }
+
+                        // Rename project
+                        const nameEl = e.target.closest('[data-edit-project-name]');
+                        if (nameEl) {
+                            const proj = getProjectById(nameEl.dataset.editProjectName);
+                            if (proj) {
+                                const nextName = window.prompt ? prompt('Project name:', proj.name) : null;
+                                if (nextName && nextName.trim()) {
+                                    proj.name = nextName.trim();
+                                    saveState();
+                                    renderProjectsAndTasks();
+                                    renderProjectNotes();
+                                }
+                            }
+                            return;
+                        }
+
+                        // Archive project
+                        const archiveBtn = e.target.closest('[data-archive-project]');
+                        if (archiveBtn) {
+                            const proj = getProjectById(archiveBtn.dataset.archiveProject);
+                            if (proj) {
+                                proj.archived = true;
+                                saveState();
+                                renderProjectsAndTasks();
+                                renderProjectNotes();
+                                showToast(`Archived "${proj.name}".`, 'info');
+                            }
+                            return;
+                        }
+
+                        // Restore archived project
+                        const restoreBtn = e.target.closest('[data-restore-project]');
+                        if (restoreBtn) {
+                            const proj = getProjectById(restoreBtn.dataset.restoreProject);
+                            if (proj) {
+                                proj.archived = false;
+                                state.selectedProjectId = proj.id;
+                                saveState();
+                                renderProjectsAndTasks();
+                                renderProjectNotes();
+                                showToast(`Restored "${proj.name}".`, 'success');
+                            }
+                            return;
+                        }
+
+                        // Accordion toggle in Completed tab
+                        const accBtn = e.target.closest('[data-accordion-completed]');
+                        if (accBtn) {
+                            const pid = accBtn.dataset.accordionCompleted;
+                            uiState.collapsedCompletedProjects[pid] = !uiState.collapsedCompletedProjects[pid];
+                            renderProjectsAndTasks();
+                            return;
+                        }
+
+                        // Toggle task importance star
+                        const starBtn = e.target.closest('[data-task-star]');
+                        if (starBtn) {
+                            const task = state.tasks.find((t) => t.id === starBtn.dataset.taskStar);
+                            if (task) {
+                                task.starred = !task.starred;
+                                saveState();
+                                renderProjectsAndTasks();
+                            }
+                            return;
+                        }
+
+                        // Follow task via eye button
+                        const followBtn = e.target.closest('[data-task-follow]');
+                        if (followBtn) {
+                            followTask(followBtn.dataset.taskFollow);
+                            return;
+                        }
+
+                        // Bullet count badge opens bullet notes
+                        const bulletBadgeBtn = e.target.closest('[data-task-bullet-toggle]');
+                        if (bulletBadgeBtn) {
+                            const tid = bulletBadgeBtn.dataset.taskBulletToggle;
+                            uiState.openTaskNoteId = uiState.openTaskNoteId === tid ? null : tid;
+                            renderProjectsAndTasks();
+                            return;
+                        }
+
+                        // Delete task
+                        const delTaskBtn = e.target.closest('[data-task-delete]');
+                        if (delTaskBtn) {
+                            const tid = delTaskBtn.dataset.taskDelete;
+                            state.tasks = state.tasks.filter((t) => t.id !== tid);
+                            if (uiState.openTaskNoteId === tid) uiState.openTaskNoteId = null;
+                            saveState();
+                            renderProjectsAndTasks();
+                            showToast('Task deleted.');
+                            return;
+                        }
+
+                        // Toggle bullet done
+                        const bulToggle = e.target.closest('[data-bullet-toggle]');
+                        if (bulToggle) {
+                            const [tid, bid] = bulToggle.dataset.bulletToggle.split(':');
+                            const task = state.tasks.find((t) => t.id === tid);
+                            const bul = task?.bullets?.find((b) => b.id === bid);
+                            if (bul) {
+                                bul.done = bulToggle.checked;
+                                saveState();
+                                renderProjectsAndTasks();
+                            }
+                            return;
+                        }
+
+                        // Delete bullet
+                        const bulDel = e.target.closest('[data-bullet-delete]');
+                        if (bulDel) {
+                            const [tid, bid] = bulDel.dataset.bulletDelete.split(':');
+                            const task = state.tasks.find((t) => t.id === tid);
+                            if (task && Array.isArray(task.bullets)) {
+                                task.bullets = task.bullets.filter((b) => b.id !== bid);
+                                saveState();
+                                renderProjectsAndTasks();
+                            }
+                            return;
+                        }
+
+                        // Single-click task title for inline editing
+                        const titleEditEl = e.target.closest('[data-task-title-edit]');
+                        if (titleEditEl) {
+                            uiState.editingTaskId = titleEditEl.dataset.taskTitleEdit;
+                            renderProjectsAndTasks();
+                            const input = tasksContainer.querySelector(`[data-task-edit-input="${uiState.editingTaskId}"]`);
+                            if (input) {
+                                input.focus();
+                                input.select();
+                            }
+                        }
+                    });
+
+                    // Double-click task row opens/closes bullet notes panel
+                    tasksContainer.addEventListener('dblclick', (e) => {
+                        if (e.target.closest('input, button, form')) return;
+                        const row = e.target.closest('[data-task-row]');
+                        if (!row) return;
+                        const tid = row.dataset.taskRow;
+                        uiState.openTaskNoteId = uiState.openTaskNoteId === tid ? null : tid;
+                        renderProjectsAndTasks();
+                        if (uiState.openTaskNoteId === tid) {
+                            const panelInput = tasksContainer.querySelector(`[data-add-bullet-form="${tid}"] input`);
+                            if (panelInput) panelInput.focus();
+                        }
+                    });
+
+                    // Checkbox completion & due date changes
+                    tasksContainer.addEventListener('change', (e) => {
+                        const compBox = e.target.closest('[data-task-complete]');
+                        if (compBox) {
+                            const task = state.tasks.find((t) => t.id === compBox.dataset.taskComplete);
+                            if (task) {
+                                task.completed = compBox.checked;
+                                task.completedAt = compBox.checked ? nowIso() : null;
+                                if (uiState.openTaskNoteId === task.id && task.completed) {
+                                    uiState.openTaskNoteId = null;
+                                }
+                                saveState();
+                                renderProjectsAndTasks();
+                            }
+                            return;
+                        }
+
+                        const dueInput = e.target.closest('[data-task-due-input]');
+                        if (dueInput) {
+                            const task = state.tasks.find((t) => t.id === dueInput.dataset.taskDueInput);
+                            if (task) {
+                                task.dueDate = dueInput.value || '';
+                                saveState();
+                                renderProjectsAndTasks();
+                            }
+                        }
+                    });
+
+                    // Inline add task & add bullet forms
+                    tasksContainer.addEventListener('submit', (e) => {
+                        const addTaskForm = e.target.closest('.add-task-inline-form');
+                        if (addTaskForm) {
+                            e.preventDefault();
+                            const projId = addTaskForm.dataset.addTaskProject;
+                            const titleInput = addTaskForm.querySelector('.new-task-title-input');
+                            const dateInput = addTaskForm.querySelector('.new-task-date-input');
+                            const starBtn = addTaskForm.querySelector('.new-task-star-btn');
+
+                            const title = (titleInput?.value || '').trim();
+                            if (!title) return;
+
+                            state.tasks.push({
+                                id: uid('task'),
+                                projectId: projId,
+                                title,
+                                dueDate: dateInput?.value || '',
+                                starred: starBtn?.dataset.starred === '1',
+                                completed: false,
+                                completedAt: null,
+                                bullets: [],
+                                createdAt: nowIso()
+                            });
+
+                            if (titleInput) titleInput.value = '';
+                            if (dateInput) dateInput.value = '';
+                            if (starBtn) {
+                                starBtn.dataset.starred = '0';
+                                starBtn.classList.remove('text-amber-500');
+                                starBtn.classList.add('text-slate-400');
+                            }
+
+                            saveState();
+                            renderProjectsAndTasks();
+                            const freshInput = tasksContainer.querySelector(`[data-add-task-project="${projId}"] .new-task-title-input`);
+                            if (freshInput) freshInput.focus();
+                            return;
+                        }
+
+                        const addBulletForm = e.target.closest('[data-add-bullet-form]');
+                        if (addBulletForm) {
+                            e.preventDefault();
+                            const tid = addBulletForm.dataset.addBulletForm;
+                            const input = addBulletForm.querySelector('input');
+                            const text = (input?.value || '').trim();
+                            if (!text) return;
+                            const task = state.tasks.find((t) => t.id === tid);
+                            if (task) {
+                                task.bullets = task.bullets || [];
+                                task.bullets.push({ id: uid('bul'), text, done: false });
+                                saveState();
+                                renderProjectsAndTasks();
+                                const nextInput = tasksContainer.querySelector(`[data-add-bullet-form="${tid}"] input`);
+                                if (nextInput) nextInput.focus();
+                            }
+                        }
+                    });
+
+                    // Inline task title commit on blur or Enter/Escape
+                    tasksContainer.addEventListener('keydown', (e) => {
+                        const editInput = e.target.closest('[data-task-edit-input]');
+                        if (!editInput) return;
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitInlineTaskEdit(editInput);
+                        } else if (e.key === 'Escape') {
+                            uiState.editingTaskId = null;
+                            renderProjectsAndTasks();
+                        }
+                    });
+
+                    tasksContainer.addEventListener(
+                        'blur',
+                        (e) => {
+                            const editInput = e.target.closest('[data-task-edit-input]');
+                            if (editInput) {
+                                commitInlineTaskEdit(editInput);
+                            }
+                        },
+                        true
+                    );
+
+                    // Drag start from task item
+                    tasksContainer.addEventListener('dragstart', (e) => {
+                        const wrapper = e.target.closest('[data-task-id]');
+                        if (!wrapper) return;
+                        e.dataTransfer.setData('text/plain', wrapper.dataset.taskId);
+                        e.dataTransfer.effectAllowed = 'copyMove';
+                    });
+                }
+
+                function commitInlineTaskEdit(inputEl) {
+                    const tid = inputEl.dataset.taskEditInput;
+                    const task = state.tasks.find((t) => t.id === tid);
+                    const nextTitle = (inputEl.value || '').trim();
+                    uiState.editingTaskId = null;
+                    if (task && nextTitle && nextTitle !== task.title) {
+                        task.title = nextTitle;
+                        saveState();
+                    }
+                    renderProjectsAndTasks();
+                }
+
+                // Outside-click auto-close for expanded task bullet notes dropdown
+                document.addEventListener('click', (e) => {
+                    if (!uiState.openTaskNoteId) return;
+                    const openPanel = document.querySelector(`[data-task-notes-panel="${uiState.openTaskNoteId}"]`);
+                    const openBadge = document.querySelector(`[data-task-bullet-toggle="${uiState.openTaskNoteId}"]`);
+                    const clickedInsidePanel = openPanel && openPanel.contains(e.target);
+                    const clickedBadge = openBadge && openBadge.contains(e.target);
+                    if (!clickedInsidePanel && !clickedBadge) {
+                        uiState.openTaskNoteId = null;
+                        renderProjectsAndTasks();
+                    }
+                });
+
+                // Drag-and-drop into Following section
+                const followingSection = document.getElementById('following-section');
+                if (followingSection) {
+                    followingSection.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                        followingSection.classList.add('drag-over-zone');
+                    });
+                    followingSection.addEventListener('dragleave', (e) => {
+                        if (!followingSection.contains(e.relatedTarget)) {
+                            followingSection.classList.remove('drag-over-zone');
+                        }
+                    });
+                    followingSection.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        followingSection.classList.remove('drag-over-zone');
+                        const taskId = e.dataTransfer.getData('text/plain');
+                        if (taskId) {
+                            followTask(taskId);
+                        }
+                    });
+                }
+
+                // Add Following form
+                const addFolForm = document.getElementById('add-following-form');
+                if (addFolForm) {
+                    addFolForm.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const codeEl = document.getElementById('following-project-code');
+                        const titleEl = document.getElementById('following-title-input');
+                        const ownerEl = document.getElementById('following-owner-input');
+                        const dueEl = document.getElementById('following-due-input');
+
+                        const title = (titleEl?.value || '').trim();
+                        if (!title) return;
+
+                        state.following.unshift({
+                            id: uid('fol'),
+                            projectCode: (codeEl?.value || '').trim().toUpperCase(),
+                            title,
+                            owner: (ownerEl?.value || '').trim(),
+                            dueDate: dueEl?.value || '',
+                            done: false,
+                            notes: '',
+                            sourceTaskId: null,
+                            createdAt: nowIso()
+                        });
+
+                        if (codeEl) codeEl.value = '';
+                        if (titleEl) titleEl.value = '';
+                        if (ownerEl) ownerEl.value = '';
+                        if (dueEl) dueEl.value = '';
+
+                        saveState();
+                        renderFollowing();
+                        showToast('Added item to Following.', 'success');
+                    });
+                }
+
+                // Following list interactions
+                const folList = document.getElementById('following-list-container');
+                if (folList) {
+                    folList.addEventListener('change', (e) => {
+                        const toggle = e.target.closest('[data-following-toggle]');
+                        if (toggle) {
+                            const itemIdx = state.following.findIndex((f) => f.id === toggle.dataset.followingToggle);
+                            if (itemIdx !== -1) {
+                                const item = state.following[itemIdx];
+                                if (toggle.checked) {
+                                    // Completed Following items move directly into Completed tasks
+                                    const activeProjects = state.projects.filter((p) => !p.archived);
+                                    const matchedByCode = item.projectCode
+                                        ? activeProjects.find((p) => (p.code || '').toUpperCase() === item.projectCode.toUpperCase())
+                                        : null;
+                                    const targetProject = matchedByCode || getProjectById(state.selectedProjectId) || activeProjects[0] || state.projects[0];
+
+                                    if (targetProject) {
+                                        state.tasks.push({
+                                            id: uid('task'),
+                                            projectId: targetProject.id,
+                                            title: item.title,
+                                            dueDate: item.dueDate || '',
+                                            starred: false,
+                                            completed: true,
+                                            completedAt: nowIso(),
+                                            bullets: item.owner ? [{ id: uid('bul'), text: `Owner: ${item.owner}`, done: true }] : [],
+                                            createdAt: nowIso()
+                                        });
+                                    }
+                                    state.following.splice(itemIdx, 1);
+                                    saveState();
+                                    renderProjectsAndTasks();
+                                    renderFollowing();
+                                    showToast(`"${item.title}" moved to Completed.`, 'success');
+                                } else {
+                                    item.done = false;
+                                    saveState();
+                                    renderFollowing();
+                                }
+                            }
+                            return;
+                        }
+
+                        const dueInput = e.target.closest('[data-following-due-input]');
+                        if (dueInput) {
+                            const item = state.following.find((f) => f.id === dueInput.dataset.followingDueInput);
+                            if (item) {
+                                item.dueDate = dueInput.value || '';
+                                saveState();
+                                renderFollowing();
+                            }
+                        }
+                    });
+
+                    folList.addEventListener('click', (e) => {
+                        const toTaskBtn = e.target.closest('[data-following-to-task]');
+                        if (toTaskBtn) {
+                            moveFollowingToTask(toTaskBtn.dataset.followingToTask);
+                            return;
+                        }
+
+                        const codeBtn = e.target.closest('[data-following-code-edit]');
+                        if (codeBtn) {
+                            const item = state.following.find((f) => f.id === codeBtn.dataset.followingCodeEdit);
+                            if (item && window.prompt) {
+                                const nextCode = prompt('Project code:', item.projectCode || '');
+                                if (nextCode !== null) {
+                                    item.projectCode = nextCode.trim().toUpperCase();
+                                    saveState();
+                                    renderFollowing();
+                                }
+                            }
+                            return;
+                        }
+
+                        const delBtn = e.target.closest('[data-following-delete]');
+                        if (delBtn) {
+                            state.following = state.following.filter((f) => f.id !== delBtn.dataset.followingDelete);
+                            saveState();
+                            renderFollowing();
+                        }
+                    });
+                }
+
+                // Project Notes sidebar & editor events
+                document.getElementById('notes-projects-sidebar')?.addEventListener('click', (e) => {
+                    const btn = e.target.closest('[data-select-note-project]');
+                    if (!btn) return;
+                    state.selectedProjectId = btn.dataset.selectNoteProject;
+                    const pages = state.notePages.filter((n) => n.projectId === state.selectedProjectId);
+                    state.selectedNoteId = pages[0]?.id || null;
+                    saveState();
+                    renderProjectNotes();
+                });
+
+                document.getElementById('notes-pages-sidebar')?.addEventListener('click', (e) => {
+                    const btn = e.target.closest('[data-select-note-page]');
+                    if (!btn) return;
+                    state.selectedNoteId = btn.dataset.selectNotePage;
+                    saveState();
+                    renderProjectNotes();
+                });
+
+                document.getElementById('create-note-page-btn')?.addEventListener('click', () => {
+                    if (!state.selectedProjectId) return;
+                    const tplSelect = document.getElementById('new-note-template-select');
+                    const tpl = tplSelect?.value || 'blank';
+                    const proj = getProjectById(state.selectedProjectId);
+                    const dateStr = todayYmd();
+
+                    let title = 'New Note';
+                    let content = '';
+
+                    if (tpl === 'meeting') {
+                        title = `Meeting (${dateStr})`;
+                        content = [
+                            'Topic:',
+                            '- ',
+                            '',
+                            'Notes:',
+                            '- ',
+                            '',
+                            'Action Items:',
+                            '- '
+                        ].join('\n');
+                    } else if (tpl === 'decision') {
+                        title = `Decisions & Actions (${dateStr})`;
+                        content = [
+                            'Decisions Made:',
+                            '- ',
+                            '',
+                            'Next Steps:',
+                            '- [ ] '
+                        ].join('\n');
+                    }
+
+                    const newPage = {
+                        id: uid('note'),
+                        projectId: state.selectedProjectId,
+                        template: tpl,
+                        title,
+                        content,
+                        updatedAt: nowIso()
+                    };
+                    state.notePages.push(newPage);
+                    state.selectedNoteId = newPage.id;
+                    saveState();
+                    renderProjectNotes();
+                    document.getElementById('note-content-textarea')?.focus();
+                });
+
+                const titleInput = document.getElementById('note-page-title-input');
+                const contentTextarea = document.getElementById('note-content-textarea');
+
+                const persistActiveNoteEdit = () => {
+                    const note = state.notePages.find((n) => n.id === state.selectedNoteId);
+                    if (!note) return;
+                    if (titleInput) note.title = titleInput.value;
+                    if (contentTextarea) note.content = contentTextarea.value;
+                    note.updatedAt = nowIso();
+                    saveState();
+                    // Refresh note page list titles without losing textarea cursor position
+                    const pagesSidebar = document.getElementById('notes-pages-sidebar');
+                    if (pagesSidebar) {
+                        const projectNotes = state.notePages.filter((n) => n.projectId === state.selectedProjectId);
+                        pagesSidebar.innerHTML = projectNotes
+                            .map((n) => {
+                                const active = n.id === state.selectedNoteId;
+                                const tplBadge =
+                                    n.template === 'meeting' ? 'Meeting' : n.template === 'decision' ? 'Actions' : 'Note';
+                                return `
+                                    <button
+                                        type="button"
+                                        data-select-note-page="${escapeHtml(n.id)}"
+                                        class="w-full text-left px-2 py-1.5 rounded-lg border transition cursor-pointer ${
+                                            active
+                                                ? 'bg-indigo-50/80 border-indigo-200 text-indigo-950'
+                                                : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
+                                        }"
+                                    >
+                                        <div class="text-xs font-semibold truncate">${escapeHtml(n.title || 'Untitled Note')}</div>
+                                        <div class="text-[10px] text-slate-400 mt-0.5">${tplBadge}</div>
+                                    </button>
+                                `;
+                            })
+                            .join('');
+                    }
+                };
+
+                titleInput?.addEventListener('input', persistActiveNoteEdit);
+                contentTextarea?.addEventListener('input', persistActiveNoteEdit);
+
+                // Copy note formatted for email
+                document.getElementById('copy-note-email-btn')?.addEventListener('click', () => {
+                    const note = state.notePages.find((n) => n.id === state.selectedNoteId);
+                    if (!note) return;
+                    const proj = getProjectById(note.projectId);
+                    copyTextToClipboard(formatNoteForEmail(note, proj), 'Copied note formatted for email!');
+                });
+
+                // Duplicate note page
+                document.getElementById('duplicate-note-page-btn')?.addEventListener('click', () => {
+                    const note = state.notePages.find((n) => n.id === state.selectedNoteId);
+                    if (!note) return;
+                    const copy = {
+                        id: uid('note'),
+                        projectId: note.projectId,
+                        template: note.template,
+                        title: `${note.title || 'Note'} (Copy)`,
+                        content: note.content,
+                        updatedAt: nowIso()
+                    };
+                    state.notePages.push(copy);
+                    state.selectedNoteId = copy.id;
+                    saveState();
+                    renderProjectNotes();
+                    showToast('Note page duplicated.', 'success');
+                });
+
+                // Delete note page
+                document.getElementById('delete-note-page-btn')?.addEventListener('click', () => {
+                    if (!state.selectedNoteId) return;
+                    state.notePages = state.notePages.filter((n) => n.id !== state.selectedNoteId);
+                    const remaining = state.notePages.filter((n) => n.projectId === state.selectedProjectId);
+                    state.selectedNoteId = remaining[0]?.id || state.notePages[0]?.id || null;
+                    saveState();
+                    renderProjectNotes();
+                    showToast('Note page removed.');
+                });
+
+                // Expand / collapse editor modal view
+                document.getElementById('toggle-expand-editor-btn')?.addEventListener('click', () => {
+                    uiState.expandedEditor = !uiState.expandedEditor;
+                    renderProjectNotes();
+                });
+
+                document.getElementById('exit-expanded-editor-btn')?.addEventListener('click', () => {
+                    uiState.expandedEditor = false;
+                    renderProjectNotes();
+                });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && uiState.expandedEditor) {
+                        uiState.expandedEditor = false;
+                        renderProjectNotes();
+                    }
+                });
+
+                // Convert selected or current line in note textarea into a task in selected target project
+                document.getElementById('send-line-to-task-btn')?.addEventListener('click', () => {
+                    const ta = document.getElementById('note-content-textarea');
+                    const targetSelect = document.getElementById('note-target-project-select');
+                    const targetProjId = targetSelect?.value || state.selectedProjectId;
+                    if (!ta || !targetProjId) return;
+
+                    const val = ta.value || '';
+                    const pos = ta.selectionStart || 0;
+                    const lineStart = val.lastIndexOf('\n', Math.max(0, pos - 1)) + 1;
+                    const lineEndIdx = val.indexOf('\n', pos);
+                    const lineEnd = lineEndIdx === -1 ? val.length : lineEndIdx;
+                    let lineText = val.slice(lineStart, lineEnd).replace(/^[\s\-*•]+(\[[ xX]\])?\s*/, '').trim();
+
+                    if (!lineText) {
+                        showToast('Place cursor on a non-empty line to convert to a task.', 'error');
+                        return;
+                    }
+
+                    state.tasks.push({
+                        id: uid('task'),
+                        projectId: targetProjId,
+                        title: lineText,
+                        dueDate: '',
+                        starred: false,
+                        completed: false,
+                        completedAt: null,
+                        bullets: [],
+                        createdAt: nowIso()
+                    });
+                    uiState.taskTab = 'active';
+                    saveState();
+                    renderProjectsAndTasks();
+                    showToast(`Converted line to task: "${lineText}"`, 'success');
+                });
+
+                // Global Search input
+                const searchInput = document.getElementById('global-search-input');
+                searchInput?.addEventListener('input', (e) => {
+                    runGlobalSearch(e.target.value);
+                });
+
+                document.getElementById('clear-search-btn')?.addEventListener('click', () => {
+                    if (searchInput) searchInput.value = '';
+                    runGlobalSearch('');
+                });
+
+                document.getElementById('close-search-results-btn')?.addEventListener('click', () => {
+                    document.getElementById('search-results-panel')?.classList.add('hidden');
+                });
+
+                // Backup & Restore Modal
+                const backupModal = document.getElementById('backup-modal');
+                const backupTextarea = document.getElementById('backup-json-textarea');
+
+                document.getElementById('open-backup-modal-btn')?.addEventListener('click', () => {
+                    if (backupTextarea) {
+                        backupTextarea.value = JSON.stringify(state, null, 2);
+                    }
+                    backupModal?.classList.remove('hidden');
+                    refreshIcons();
+                });
+
+                document.getElementById('close-backup-modal-btn')?.addEventListener('click', () => {
+                    backupModal?.classList.add('hidden');
+                });
+
+                document.getElementById('download-backup-btn')?.addEventListener('click', () => {
+                    try {
+                        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `personal-focus-backup-${todayYmd()}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(url);
+                        showToast('Backup JSON downloaded.', 'success');
+                    } catch (err) {
+                        showToast('Failed to download backup.', 'error');
+                    }
+                });
+
+                document.getElementById('restore-file-input')?.addEventListener('change', (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        try {
+                            const parsed = JSON.parse(String(reader.result || '{}'));
+                            state = normalizeLoadedData(parsed);
+                            saveState();
+                            renderAll();
+                            backupModal?.classList.add('hidden');
+                            showToast('Workspace restored from backup file.', 'success');
+                        } catch {
+                            showToast('Invalid JSON backup file.', 'error');
+                        }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = '';
+                });
+
+                document.getElementById('copy-json-btn')?.addEventListener('click', () => {
+                    copyTextToClipboard(JSON.stringify(state, null, 2), 'JSON snapshot copied.');
+                });
+
+                document.getElementById('apply-pasted-json-btn')?.addEventListener('click', () => {
+                    try {
+                        const parsed = JSON.parse(backupTextarea?.value || '{}');
+                        state = normalizeLoadedData(parsed);
+                        saveState();
+                        renderAll();
+                        backupModal?.classList.add('hidden');
+                        showToast('JSON workspace applied.', 'success');
+                    } catch {
+                        showToast('Could not parse pasted JSON.', 'error');
+                    }
+                });
+
+                // Device Sync Modal
+                const syncModal = document.getElementById('sync-modal');
+                const syncCodeInput = document.getElementById('sync-code-input');
+
+                document.getElementById('open-sync-modal-btn')?.addEventListener('click', () => {
+                    if (syncCodeInput) syncCodeInput.value = state.syncCode || '';
+                    updateSyncIndicator();
+                document.getElementById('save-sync-code-btn')?.addEventListener('click', async () => {
+                    state.syncCode = (syncCodeInput?.value || '').trim();
+                    saveState(true, false);
+                    updateSyncIndicator();
+                    if (state.syncCode) {
+                        attachSyncListener(state.syncCode);
+                        await pushStateNowToCloud(state.syncCode);
+                        showToast(`Auto-sync active for "${state.syncCode}".`, 'success');
+                    } else {
+                        detachSyncListener();
+                        showToast('Local mode active.', 'success');
+                    }
+                });
+
+                document.getElementById('clear-sync-code-btn')?.addEventListener('click', () => {
+                    state.syncCode = '';
+                    if (syncCodeInput) syncCodeInput.value = '';
+                    detachSyncListener();
+                    saveState(true, false);
+                    updateSyncIndicator();
+                    showToast('Switched to Local Only mode.');
+                });
+            }
+
+            function renderAll() {
+                renderProjectsAndTasks();
+                renderProjectNotes();
+                renderFollowing();
+                updateCountsAndHeader();
+                refreshIcons();
+            }
+
+            window.addEventListener('DOMContentLoaded', () => {
+                loadState();
+                bindEvents();
+                renderAll();
+                initCloudBackend();
+            });
+
+            window.addEventListener('cloud-sync-ready', () => {
+                if (!cloudDb) {
+                    initCloudBackend();
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
