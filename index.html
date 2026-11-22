@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Focus &amp; Notes</title>
+    <title>Personal Focus &amp; Notes v1.0</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Inter -->
@@ -107,6 +107,7 @@
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
                         <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 truncate">Personal Focus &amp; Notes</h1>
+                        <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200/80 shrink-0">v1.0</span>
                         <span id="sync-status-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
                             <span id="sync-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             <span id="sync-status-text">Local Saved</span>
@@ -502,6 +503,7 @@
         import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
         (function () {
+            const APP_VERSION = 'v1.0';
             const STORAGE_KEY = 'personal_focus_notes_v2';
             const CUSTOM_FB_KEY = 'personal_focus_notes_fb_cfg';
             const LEGACY_KEYS = ['personal_focus_notes_v1', 'focus_notes_data', 'projects_tasks_notes'];
