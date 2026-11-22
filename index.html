@@ -254,19 +254,37 @@
                     </div>
 
                     <div id="notes-body-grid" class="grid grid-cols-1 md:grid-cols-12 min-h-[640px] max-h-[860px]">
-                        <!-- Left Page List -->
-                        <div id="notes-pages-sidebar" class="md:col-span-3 border-b md:border-b-0 md:border-r border-slate-100 bg-slate-50/50 p-2.5 flex flex-col justify-between gap-2 max-h-48 md:max-h-[860px] overflow-y-auto">
+                        <!-- Left Project & Page List -->
+                        <div id="notes-pages-sidebar" class="md:col-span-3 border-b md:border-b-0 md:border-r border-slate-100 bg-slate-50/50 p-2.5 flex flex-col gap-3 max-h-64 md:max-h-[860px] overflow-y-auto">
                             <div class="space-y-1.5">
-                                <div class="flex items-center justify-between px-1">
+                                <div class="px-1">
+                                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Projects</span>
+                                </div>
+                                <div id="note-projects-list" class="space-y-1"></div>
+                            </div>
+
+                            <div class="space-y-1.5 pt-2 border-t border-slate-200/70">
+                                <div class="flex items-center justify-between px-1 gap-1">
                                     <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Pages</span>
-                                    <button
-                                        id="add-note-page-btn"
-                                        type="button"
-                                        class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition cursor-pointer"
-                                    >
-                                        <i data-lucide="plus" class="w-3 h-3"></i>
-                                        <span>New</span>
-                                    </button>
+                                    <div class="flex items-center gap-1">
+                                        <button
+                                            id="add-meeting-template-btn"
+                                            type="button"
+                                            title="Create a Meeting Notes template page"
+                                            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md transition cursor-pointer"
+                                        >
+                                            <i data-lucide="calendar-plus" class="w-3 h-3 text-indigo-600"></i>
+                                            <span>Meeting</span>
+                                        </button>
+                                        <button
+                                            id="add-note-page-btn"
+                                            type="button"
+                                            class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition cursor-pointer"
+                                        >
+                                            <i data-lucide="plus" class="w-3 h-3"></i>
+                                            <span>New</span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div id="note-pages-list" class="space-y-1"></div>
                             </div>
@@ -685,6 +703,13 @@
                             projectId: generalProjId,
                             title: 'Weekly Focus & Scratchpad',
                             content: '<h2>Key Priorities</h2><ul><li>Keep active projects under 5 core streams.</li><li>Double-click any task row to add detailed bullet sub-steps.</li></ul><blockquote>Tip: Click any project header on the left to switch its dedicated notes workspace.</blockquote>',
+                            updatedAt: nowIso()
+                        },
+                        {
+                            id: uid('page'),
+                            projectId: generalProjId,
+                            title: 'Meeting Notes Template',
+                            content: '<h1>Meeting Notes</h1><p><strong>Date:</strong> ' + todayStr() + ' &bull; <strong>Attendees:</strong> </p><h2>Agenda</h2><ul><li></li></ul><h2>Key Decisions</h2><ul><li></li></ul><h2>Action Items</h2><ul><li></li></ul>',
                             updatedAt: nowIso()
                         },
                         {
@@ -1676,6 +1701,35 @@
                 const pages = getPagesForSelectedProject();
                 const currentPage = getCurrentNotePage();
 
+                const noteProjectsListEl = document.getElementById('note-projects-list');
+                if (noteProjectsListEl) {
+                    const activeProjects = state.projects.filter((p) => !p.archived);
+                    noteProjectsListEl.innerHTML = activeProjects
+                        .map((p) => {
+                            const isCurrent = p.id === proj.id;
+                            const pal = getPalette(p);
+                            return `
+                                <button
+                                    type="button"
+                                    data-note-select-project="${escapeHtml(p.id)}"
+                                    title="${escapeHtml(p.name)}"
+                                    class="w-full text-left px-2 py-1.5 rounded-lg text-xs transition flex items-center gap-1.5 cursor-pointer ${
+                                        isCurrent
+                                            ? 'bg-white text-slate-900 font-bold shadow-2xs border border-slate-200'
+                                            : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
+                                    }"
+                                >
+                                    <span
+                                        style="background-color: ${pal.badgeBg}; color: ${pal.badgeText};"
+                                        class="px-1 py-0.5 text-[9px] font-bold uppercase rounded shrink-0"
+                                    >${escapeHtml(p.code || 'PRJ')}</span>
+                                    <span class="truncate flex-1">${highlightText(p.name, uiState.searchQuery)}</span>
+                                </button>
+                            `;
+                        })
+                        .join('');
+                }
+
                 const pagesListEl = document.getElementById('note-pages-list');
                 if (pagesListEl) {
                     pagesListEl.innerHTML = pages
@@ -2663,6 +2717,29 @@
                 }
 
                 document.getElementById('toggle-expand-editor-btn')?.addEventListener('click', toggleExpandEditor);
+
+                document.getElementById('note-projects-list')?.addEventListener('click', (e) => {
+                    const btn = e.target.closest('[data-note-select-project]');
+                    if (!btn) return;
+                    selectProject(btn.dataset.noteSelectProject);
+                });
+
+                document.getElementById('add-meeting-template-btn')?.addEventListener('click', () => {
+                    const pid = state.selectedProjectId;
+                    if (!pid) return;
+                    const meetingPage = {
+                        id: uid('page'),
+                        projectId: pid,
+                        title: `Meeting Notes (${todayStr()})`,
+                        content: `<h1>Meeting Notes</h1><p><strong>Date:</strong> ${todayStr()} &bull; <strong>Attendees:</strong> </p><h2>Agenda</h2><ul><li></li></ul><h2>Key Decisions</h2><ul><li></li></ul><h2>Action Items</h2><ul><li></li></ul>`,
+                        updatedAt: nowIso()
+                    };
+                    state.notePages.push(meetingPage);
+                    state.selectedNotePageByProject[pid] = meetingPage.id;
+                    saveState();
+                    renderProjectNotes();
+                    showToast('Meeting Notes template added.', 'success');
+                });
 
                 document.getElementById('add-note-page-btn')?.addEventListener('click', () => {
                     const pid = state.selectedProjectId;
