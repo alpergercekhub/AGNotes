@@ -74,7 +74,7 @@
 
     <!-- Top Navigation & Global Search Header -->
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 sm:px-5 py-2.5">
-        <div class="max-w-[1680px] mx-auto flex flex-wrap items-center justify-between gap-2.5">
+        <div class="max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-2.5">
             <!-- Brand & Sync Status -->
             <div class="flex items-center gap-2.5 min-w-0">
                 <div class="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
@@ -133,7 +133,7 @@
         </div>
 
         <!-- Global Search Results Dropdown -->
-        <div id="search-results-panel" class="hidden max-w-[1680px] mx-auto mt-2 bg-white border border-slate-200 rounded-2xl shadow-lg p-3 max-h-80 overflow-y-auto">
+        <div id="search-results-panel" class="hidden max-w-[1920px] mx-auto mt-2 bg-white border border-slate-200 rounded-2xl shadow-lg p-3 max-h-80 overflow-y-auto">
             <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
                 <span id="search-results-summary" class="text-xs font-semibold text-slate-600">Search Results</span>
                 <button id="close-search-results-btn" type="button" class="text-xs text-slate-500 hover:text-slate-800">Close</button>
@@ -142,10 +142,10 @@
         </div>
     </header>
 
-    <!-- Main 50/50 Split Workspace: Left = Projects & Tasks | Right = Project Notes + Following -->
-    <main class="max-w-[1680px] mx-auto p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        <!-- LEFT HALF (6 cols): Projects & Tasks -->
-        <section id="projects-tasks-column" class="lg:col-span-6 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden">
+    <!-- Main Split Workspace: Left = Projects & Tasks (Fixed Proportion) | Right = Wider & Taller Project Notes + Lower Following -->
+    <main class="max-w-[1920px] mx-auto p-2.5 sm:p-3.5 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        <!-- LEFT COLUMN (5 cols on 1920px container = same width as before, anchored further left): Projects & Tasks -->
+        <section id="projects-tasks-column" class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden">
             <!-- Top Bar & Sub-tabs -->
             <div class="px-3.5 py-2.5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
@@ -210,8 +210,8 @@
             <div id="tasks-view-container" class="p-3 space-y-3 max-h-[calc(100vh-11.5rem)] min-h-[420px] overflow-y-auto"></div>
         </section>
 
-        <!-- RIGHT HALF (6 cols): Stacked Project Notes (top) & Following (bottom) -->
-        <div class="lg:col-span-6 flex flex-col gap-4">
+        <!-- RIGHT COLUMN (7 cols): Expanded Project Notes (top) & Lower Following (bottom) -->
+        <div class="lg:col-span-7 flex flex-col gap-6">
             <!-- TOP-RIGHT: Project Notes -->
             <section id="project-notes-section" class="bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden">
                 <div class="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2">
@@ -235,12 +235,12 @@
                     </div>
                 </div>
 
-                <!-- 3-Pane Notes Body: Vertical Active Projects | Vertical Note Pages | Long-Form Editor -->
-                <div class="grid grid-cols-1 sm:grid-cols-12 min-h-[540px] max-h-[740px]">
+                <!-- 3-Pane Notes Body: Compact Sidebars | Spacious Long-Form Editor -->
+                <div class="grid grid-cols-1 sm:grid-cols-12 min-h-[640px] max-h-[860px]">
                     <!-- Pane 1: Vertical Active Projects Sidebar -->
-                    <aside class="sm:col-span-3 border-b sm:border-b-0 sm:border-r border-slate-200 bg-slate-50/50 flex flex-col max-h-40 sm:max-h-full overflow-y-auto">
-                        <div class="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                            Active Projects
+                    <aside class="sm:col-span-2 border-b sm:border-b-0 sm:border-r border-slate-200 bg-slate-50/50 flex flex-col max-h-40 sm:max-h-full overflow-y-auto">
+                        <div class="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                            Projects
                         </div>
                         <div id="notes-projects-sidebar" class="p-1.5 space-y-1"></div>
                     </aside>
@@ -270,8 +270,8 @@
                         <div id="notes-pages-sidebar" class="flex-1 p-1.5 space-y-1 overflow-y-auto"></div>
                     </aside>
 
-                    <!-- Pane 3: Long-Form Note Editor -->
-                    <div id="note-editor-container" class="sm:col-span-6 flex flex-col bg-white overflow-hidden">
+                    <!-- Pane 3: Long-Form Note Editor (Expanded Reading/Writing Area) -->
+                    <div id="note-editor-container" class="sm:col-span-7 flex flex-col bg-white overflow-hidden">
                         <div class="px-3 py-2 border-b border-slate-100 flex flex-wrap items-center justify-between gap-1.5">
                             <input
                                 id="note-page-title-input"
@@ -340,16 +340,16 @@
                         <textarea
                             id="note-content-textarea"
                             placeholder="Write long-form notes, meeting minutes, owners, dates, or action items..."
-                            class="flex-1 w-full p-3 text-xs sm:text-sm leading-relaxed text-slate-700 resize-none outline-none"
+                            class="flex-1 w-full p-4 text-sm leading-relaxed text-slate-700 resize-none outline-none"
                         ></textarea>
                     </div>
                 </div>
             </section>
 
-            <!-- BOTTOM-RIGHT: Following / Watchlist -->
+            <!-- BOTTOM-RIGHT: Following / Watchlist (Positioned further down with extra spacing) -->
             <section
                 id="following-section"
-                class="bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden transition"
+                class="mt-4 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden transition"
             >
                 <div class="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
@@ -1169,12 +1169,30 @@
                                         >${proj.code ? escapeHtml(proj.code) : '+CODE'}</span>
                                         <h3
                                             data-edit-project-name="${escapeHtml(proj.id)}"
-                                            title="Click to rename project"
+                                            title="${escapeHtml(proj.name)} (Click to rename project)"
                                             class="text-xs sm:text-sm font-bold text-slate-800 break-words cursor-pointer"
                                         >${highlightText(proj.name, uiState.searchQuery)}</h3>
                                     </div>
-                                    <div class="flex items-center gap-1.5 shrink-0">
-                                        <span class="text-[11px] font-semibold text-slate-600">${doneCount}/${totalCount}</span>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <div class="inline-flex items-center bg-white/70 border border-slate-300/60 rounded-md overflow-hidden">
+                                            <button
+                                                type="button"
+                                                data-move-project-up="${escapeHtml(proj.id)}"
+                                                title="Move project up"
+                                                class="p-0.5 text-slate-600 hover:text-slate-900 hover:bg-white transition cursor-pointer"
+                                            >
+                                                <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                data-move-project-down="${escapeHtml(proj.id)}"
+                                                title="Move project down"
+                                                class="p-0.5 text-slate-600 hover:text-slate-900 hover:bg-white border-l border-slate-300/60 transition cursor-pointer"
+                                            >
+                                                <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                                            </button>
+                                        </div>
+                                        <span class="text-[11px] font-semibold text-slate-600 px-1">${doneCount}/${totalCount}</span>
                                         <button
                                             type="button"
                                             data-archive-project="${escapeHtml(proj.id)}"
@@ -1291,7 +1309,7 @@
                                         >`
                                         : `<span
                                             data-task-title-edit="${escapeHtml(task.id)}"
-                                            title="Click to edit title • Double-click row for bullet notes"
+                                            title="${escapeHtml(task.title)} — Click to edit title • Double-click row for bullet notes"
                                             class="${titleClass} flex-1 min-w-0 break-words whitespace-normal cursor-text"
                                         >${highlightText(task.title, uiState.searchQuery)}</span>`
                                 }
@@ -1532,6 +1550,7 @@
                             <button
                                 type="button"
                                 data-select-note-project="${escapeHtml(p.id)}"
+                                title="${p.code ? `[${escapeHtml(p.code)}] ` : ''}${escapeHtml(p.name)}"
                                 style="${selected ? `background-color: ${palette.headerBg}; border-color: ${palette.headerBorder};` : ''}"
                                 class="w-full text-left px-2 py-1.5 rounded-lg border ${
                                     selected
@@ -1563,6 +1582,7 @@
                                     <button
                                         type="button"
                                         data-select-note-page="${escapeHtml(n.id)}"
+                                        title="${escapeHtml(n.title || 'Untitled Note')}"
                                         class="w-full text-left px-2 py-1.5 rounded-lg border transition cursor-pointer ${
                                             active
                                                 ? 'bg-indigo-50/80 border-indigo-200 text-indigo-950'
@@ -1611,7 +1631,7 @@
                             exitExpandBtn.classList.add('inline-flex');
                         }
                     } else {
-                        editorContainer.className = 'sm:col-span-6 flex flex-col bg-white overflow-hidden';
+                        editorContainer.className = 'sm:col-span-7 flex flex-col bg-white overflow-hidden';
                         expandBtn.classList.remove('hidden');
                         expandBtn.innerHTML = `<i data-lucide="maximize-2" class="w-3.5 h-3.5"></i><span>Expand Editor</span>`;
                         if (exitExpandBtn) {
@@ -1701,16 +1721,19 @@
                                         title="Click to edit project code"
                                         class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-200/80 text-slate-700 uppercase shrink-0 cursor-pointer"
                                     >${item.projectCode ? escapeHtml(item.projectCode) : 'NO-CODE'}</span>
-                                    <span class="${
-                                        item.done
-                                            ? 'line-through text-slate-400'
-                                            : overdue
-                                            ? 'font-bold text-rose-700'
-                                            : 'font-medium text-slate-800'
-                                    } break-words whitespace-normal flex-1 min-w-0">${highlightText(item.title, uiState.searchQuery)}</span>
+                                    <span
+                                        title="${escapeHtml(item.title)}${item.owner ? ` (@${escapeHtml(item.owner)})` : ''}"
+                                        class="${
+                                            item.done
+                                                ? 'line-through text-slate-400'
+                                                : overdue
+                                                ? 'font-bold text-rose-700'
+                                                : 'font-medium text-slate-800'
+                                        } break-words whitespace-normal flex-1 min-w-0"
+                                    >${highlightText(item.title, uiState.searchQuery)}</span>
                                     ${
                                         item.owner
-                                            ? `<span class="inline-block px-1.5 py-0.5 text-[10px] bg-white border border-slate-200 rounded text-slate-600 shrink-0">@${escapeHtml(item.owner)}</span>`
+                                            ? `<span title="Owner: ${escapeHtml(item.owner)}" class="inline-block px-1.5 py-0.5 text-[10px] bg-white border border-slate-200 rounded text-slate-600 shrink-0">@${escapeHtml(item.owner)}</span>`
                                             : ''
                                     }
                                 </div>
@@ -1930,7 +1953,7 @@
                     starred: false,
                     completed: false,
                     completedAt: null,
-                    bullets: item.owner ? [{ id: uid('bul'), text: `Owner: ${item.owner}`, done: false }] : [],
+                    bullets: [],
                     createdAt: nowIso()
                 });
 
@@ -1940,6 +1963,28 @@
                 renderProjectsAndTasks();
                 renderFollowing();
                 showToast(`Moved "${item.title}" to ${targetProject.name} tasks.`, 'success');
+            }
+
+            function moveActiveProject(projectId, direction) {
+                const activeIndices = [];
+                state.projects.forEach((p, idx) => {
+                    if (!p.archived) activeIndices.push(idx);
+                });
+                const posInActive = activeIndices.findIndex((idx) => state.projects[idx].id === projectId);
+                if (posInActive === -1) return;
+
+                const targetPosInActive = posInActive + direction;
+                if (targetPosInActive < 0 || targetPosInActive >= activeIndices.length) return;
+
+                const idxA = activeIndices[posInActive];
+                const idxB = activeIndices[targetPosInActive];
+                const temp = state.projects[idxA];
+                state.projects[idxA] = state.projects[idxB];
+                state.projects[idxB] = temp;
+
+                saveState();
+                renderProjectsAndTasks();
+                renderProjectNotes();
             }
 
             function commitInlineTaskEdit(inputEl) {
@@ -2026,6 +2071,18 @@
                                 saveState();
                                 renderProjectsAndTasks();
                             }
+                            return;
+                        }
+
+                        const moveUpBtn = e.target.closest('[data-move-project-up]');
+                        if (moveUpBtn) {
+                            moveActiveProject(moveUpBtn.dataset.moveProjectUp, -1);
+                            return;
+                        }
+
+                        const moveDownBtn = e.target.closest('[data-move-project-down]');
+                        if (moveDownBtn) {
+                            moveActiveProject(moveDownBtn.dataset.moveProjectDown, 1);
                             return;
                         }
 
